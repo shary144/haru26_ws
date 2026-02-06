@@ -3,21 +3,31 @@ import numpy as np
 import os
 import rclpy
 from rclpy.node import Node
+from pathlib import Path
 
 
 class MinimalPublisher(Node):
     def __init__(self):
         super().__init__("ball_detector")  # ← 必須
 
-        base_dir = /home/kouki/haru26_ws/src/cvpkg/cvpkg
-        img_path = os.path.join(base_dir, "ball1.webp")
-        print(f'img_path is located in {img_path}')
+# ---------------------------------------------------------
+        # 【修正ポイント】
+        # 自分のファイル(__file__)の場所を取得して、そこを基準にする
+        # ---------------------------------------------------------
+        base_dir = Path.home() / "haru26_ws"
+        img_path = 
+        img_path = "/home/kouki/haru26_ws/src/cvpkg/cvpkg/ball1.webp"
+        
+        # デバッグ用：実際にどこを探しているか確認する
+        print(f'Looking for image at: {img_path}') 
+        
+        # ファイルが存在するか確認（念の為）
+        if not os.path.exists(img_path):
+             self.get_logger().error(f"ファイルが存在しません: {img_path}")
+             # ここで終了せずにreturnなどで抜けるのが安全ですが、テストならexitでもOK
+             exit()
 
         img = cv2.imread(img_path)
-        if img is None:
-            self.get_logger().error("画像が見つかりませんでした")
-            return
-
         # （画像処理はそのまま）
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
@@ -66,7 +76,7 @@ class MinimalPublisher(Node):
 
 
         cv2.imshow("Detected Balls", img)
-        cv2.waitKey(1)   # 0は使わない
+        cv2.waitKey(0)
         cv2.destroyAllWindows()
 
 
