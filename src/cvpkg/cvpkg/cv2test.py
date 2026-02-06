@@ -5,10 +5,10 @@ import rclpy
 from rclpy.node import Node
 from pathlib import Path
 
-
 class MinimalPublisher(Node):
     def __init__(self):
         super().__init__("ball_detector")
+        
         base_dir = Path.home() / "haru26_ws/src/cvpkg/cvpkg"
         img_path = os.path.join(base_dir, "ball1.webp") # ファイル名を指定
         
@@ -70,6 +70,7 @@ class MinimalPublisher(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = MinimalPublisher()
+    rclpy.spin(minimal_publisher)
     node.destroy_node()
     rclpy.shutdown()
 

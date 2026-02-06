@@ -25,6 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'ball_detector = cvpkg.cv2test:main',
+
+            'simple_camera = cvpkg.simple_camera:main',
         ],
     },
 )
