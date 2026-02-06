@@ -8,23 +8,12 @@ from pathlib import Path
 
 class MinimalPublisher(Node):
     def __init__(self):
-        super().__init__("ball_detector")  # ← 必須
-
-# ---------------------------------------------------------
-        # 【修正ポイント】
-        # 自分のファイル(__file__)の場所を取得して、そこを基準にする
-        # ---------------------------------------------------------
-        base_dir = Path.home() / "haru26_ws"
-        img_path = 
-        img_path = "/home/kouki/haru26_ws/src/cvpkg/cvpkg/ball1.webp"
+        super().__init__("ball_detector")
+        base_dir = Path.home() / "haru26_ws/src/cvpkg/cvpkg"
+        img_path = os.path.join(base_dir, "ball1.webp") # ファイル名を指定
         
-        # デバッグ用：実際にどこを探しているか確認する
-        print(f'Looking for image at: {img_path}') 
-        
-        # ファイルが存在するか確認（念の為）
         if not os.path.exists(img_path):
              self.get_logger().error(f"ファイルが存在しません: {img_path}")
-             # ここで終了せずにreturnなどで抜けるのが安全ですが、テストならexitでもOK
              exit()
 
         img = cv2.imread(img_path)
@@ -80,7 +69,7 @@ class MinimalPublisher(Node):
         cv2.destroyAllWindows()
 
 
-def main(args=None):          # ← クラスの外！
+def main(args=None):
     rclpy.init(args=args)
     node = MinimalPublisher()
     rclpy.spin(node)
