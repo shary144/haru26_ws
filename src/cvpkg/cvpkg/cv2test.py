@@ -17,8 +17,8 @@ class MinimalPublisher(Node):
              exit()
 
         img = cv2.imread(img_path)
-        # （画像処理はそのまま）
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV) # hsvに変換
 
         # --- 青色の範囲 ---
         lower_blue = np.array([100, 100, 50])
@@ -63,19 +63,15 @@ class MinimalPublisher(Node):
                 cv2.putText(img, "Red", (center[0] - 20, center[1] - radius - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
-
         cv2.imshow("Detected Balls", img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = MinimalPublisher()
-    rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()
