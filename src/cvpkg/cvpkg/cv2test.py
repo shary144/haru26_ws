@@ -8,33 +8,46 @@ from pathlib import Path
 class MinimalPublisher(Node):
     def __init__(self):
         super().__init__("ball_detector")
-        
+
+        # パラメータ宣言
+        self.declare_parameter("lower_blue", [100, 100, 50])
+        self.declare_parameter("upper_blue", [140, 255, 255])
+
+        self.declare_parameter("lower_red1", [0, 120, 70])
+        self.declare_parameter("upper_red1", [10, 255, 255])
+        self.declare_parameter("lower_red2", [170, 120, 70])
+        self.declare_parameter("upper_red2", [180, 255, 255])
+
+        timer_period = 0.03
+        self.timer = self.create_timer(timer_period, self.timer_callback)
+
         base_dir = Path.home() / "haru26_ws/src/cvpkg/cvpkg"
-        img_path = os.path.join(base_dir, "ball1.webp") # ファイル名を指定
-        
+        img_path = os.path.join(base_dir, "ball1.webp")
+
         if not os.path.exists(img_path):
-             self.get_logger().error(f"ファイルが存在しません: {img_path}")
-             exit()
+            self.get_logger().error(f"ファイルが存在しません: {img_path}")
+            exit()
 
-        img = cv2.imread(img_path)
+        self.img = cv2.imread(img_path)
+        self.hsv = cv2.cvtColor(self.img, cv2.COLOR_BGR2HSV)
 
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV) # hsvに変換
+    def timer_callback(self):
+        img = self.img.copy()
+        hsv = self.hsv
 
-        # --- 青色の範囲 ---
-        lower_blue = np.array([100, 100, 50])
-        upper_blue = np.array([140, 255, 255])
+        # パラメータ取得
+        lower_blue = np.array(self.get_parameter("lower_blue").value)
+        upper_blue = np.array(self.get_parameter("upper_blue").value)
+
+        lower_red1 = np.array(self.get_parameter("lower_red1").value)
+        upper_red1 = np.array(self.get_parameter("upper_red1").value)
+        lower_red2 = np.array(self.get_parameter("lower_red2").value)
+        upper_red2 = np.array(self.get_parameter("upper_red2").value)
+
+        # マスク生成
         mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
-
-        # --- 赤色の範囲（2つ必要） ---
-        lower_red1 = np.array([0, 120, 70])
-        upper_red1 = np.array([10, 255, 255])
         mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
-
-        lower_red2 = np.array([170, 120, 70])
-        upper_red2 = np.array([180, 255, 255])
         mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
-
-        # 赤のマスクを合成
         mask_red = mask_red1 | mask_red2
 
         # --- 青色の輪郭処理 ---
@@ -64,13 +77,12 @@ class MinimalPublisher(Node):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
         cv2.imshow("Detected Balls", img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        cv2.waitKey(1)
 
 def main(args=None):
     rclpy.init(args=args)
     node = MinimalPublisher()
-    rclpy.spin(minimal_publisher)
+    rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 
