@@ -1,0 +1,3 @@
+[submodule "src/robomas_package_2"]
+	path = src/robomas_package_2
+	url = https://github.com/ar216-2355/robomas_package_2.git
