@@ -27,6 +27,8 @@ setup(
             'ball_detector = cvpkg.cv2test:main',
 
             'simple_camera = cvpkg.simple_camera:main',
+
+            'parameter_show = cvpkg.paratest:main',
         ],
     },
 )

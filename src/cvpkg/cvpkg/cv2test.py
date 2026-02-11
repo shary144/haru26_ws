@@ -18,7 +18,7 @@ class MinimalPublisher(Node):
         self.declare_parameter("lower_red2", [170, 120, 70])
         self.declare_parameter("upper_red2", [180, 255, 255])
 
-        timer_period = 0.03
+        timer_period = 0.033
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
         base_dir = Path.home() / "haru26_ws/src/cvpkg/cvpkg"
@@ -36,13 +36,13 @@ class MinimalPublisher(Node):
         hsv = self.hsv
 
         # パラメータ取得
-        lower_blue = np.array(self.get_parameter("lower_blue").value)
-        upper_blue = np.array(self.get_parameter("upper_blue").value)
+        lower_blue = np.array(self.get_parameter("lower_blue").value, dtype=np.uint8)
+        upper_blue = np.array(self.get_parameter("upper_blue").value, dtype=np.uint8)
 
-        lower_red1 = np.array(self.get_parameter("lower_red1").value)
-        upper_red1 = np.array(self.get_parameter("upper_red1").value)
-        lower_red2 = np.array(self.get_parameter("lower_red2").value)
-        upper_red2 = np.array(self.get_parameter("upper_red2").value)
+        lower_red1 = np.array(self.get_parameter("lower_red1").value, dtype=np.uint8)
+        upper_red1 = np.array(self.get_parameter("upper_red1").value, dtype=np.uint8)
+        lower_red2 = np.array(self.get_parameter("lower_red2").value, dtype=np.uint8)
+        upper_red2 = np.array(self.get_parameter("upper_red2").value, dtype=np.uint8)
 
         # マスク生成
         mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
