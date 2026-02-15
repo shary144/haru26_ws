@@ -1,3 +1,9 @@
+[submodule "src/robomas_interfaces"]
+	path = src/robomas_interfaces
+	url = https://github.com/ar216-2355/robomas_interfaces.git
+[submodule "src/robomas_controller"]
+	path = src/robomas_controller
+	url = https://github.com/ar216-2355/robomas_controller.git
 [submodule "src/robomas_package_2"]
 	path = src/robomas_package_2
 	url = https://github.com/ar216-2355/robomas_package_2.git
