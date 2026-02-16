@@ -169,6 +169,37 @@ def lidar_scan_noise(r_true_array):
 
     return r_true_array + normal_noise + outlier
 
+# @title 一回Estimateで辺と頂点を抽出してみたい(モーションディストーションなし)
+def est_err(point_coords):
+    """Lidarの動きよりレーダー角速度の方が大きいことを根拠に、距離からレーダー角速度のみを用いて2次元に投影した図形の辺は直線近似ができる、ノイズは真の値に対して+ohmや-ohmを取るとする
+    と考えていた時期がありました。たぶん全体的に微妙に曲線になっていてフィットが厳しい。いや移動平均で何とかなるか？
+    まずrが連続してる部分でrから直接凹凸を取り出すのもできそうではある。そもそも連続した複数点の重心が尖っている点の内側になることを利用できるか
+    閾値→フィールド上の最近接点が700mmなので辺のノイズ幅を350mmまでと考える"""
+    distract_threshold = 10
+    start = 0
+    end = 0
+    result = []
+    while True:
+        for end in range(start+2, point_coords.shape[0]):
+            M = np.mean(point_coords[start:end], axis=0)
+            s_xy = np.sum((point_coords[start:end, 1]-M[1])*(point_coords[start:end, 0]-M[0]))
+            s_x = np.sum((point_coords[start:end,0]-M[0])**2)
+            print(s_xy)
+            print(s_x)
+            gap = ((point_coords[end:end+distract_threshold])-M) @ np.array([[-s_xy],[s_x]])
+            print(gap)
+            if np.all(gap>0) or np.all(gap<0):
+                result.append(end)
+                start = end
+                break
+        if start+2 >= point_coords.shape[0]:
+            break
+    print(result)
+
+def cvt_polar2xy(rs,thetas):
+    return rs.reshape((-1,1)) * np.array([np.cos(thetas),
+                                          np.sin(thetas)]).T
+
 class Jikoiti(Node):
 
     def __init__(self):
@@ -180,10 +211,100 @@ class Jikoiti(Node):
 #       print(report)
         r = report.loc[:,"radar.r"].values.astype(float)
         theta = np.linspace(0,2*np.pi,LiDar.sampling_rate)
-        plt.scatter(*(lidar_scan_noise(r).reshape(-1,1)*np.array([np.cos(theta),np.sin(theta)]).T).T,s=1)
-        plt.gca().set_aspect("equal")
+#        plt.scatter(*(lidar_scan_noise(r).reshape(-1,1)*np.array([np.cos(theta),np.sin(theta)]).T).T,s=1)
+#        plt.gca().set_aspect("equal")
 
+        #@title 前後平均ベクトル内積を見てみる
+        noisy_r = lidar_scan_noise(r).reshape(-1,1)*np.array([np.cos(theta),np.sin(theta)]).T
+        #plt.scatter(*(noisy_r[1:]-noisy_r[:-1]).T)
+        d_noisy_r = noisy_r[1:]-noisy_r[:-1]
+        div_ind = np.where(np.any(np.abs(d_noisy_r) >= 350, axis=-1))
+        blocks = []
+        seq = 10
+
+        size = d_noisy_r.shape[0]
+
+        former = np.arange(size-2*seq).reshape(-1,1) + np.arange(seq).reshape(1,-1)
+        later = np.arange(seq, size-seq).reshape(-1,1) + np.arange(seq).reshape(1,-1)
+
+        former = d_noisy_r[(former.reshape(-1),)].reshape(*former.shape, 2)
+        later = d_noisy_r[(later.reshape(-1),)].reshape(*later.shape, 2)
+
+        print(former.shape)
+        norm_former = former / np.linalg.norm(former,axis=-1).reshape(-1,seq,1)
+        norm_later = later / np.linalg.norm(later,axis=-1).reshape(-1,seq,1)
+        print(norm_former)
+
+        m_norm_former = norm_former.mean(axis=-2)
+        m_norm_later = norm_later.mean(axis=-2)
+        print(m_norm_former.shape)
+        m_norm_dot = np.sum(m_norm_former * m_norm_later, axis=-1)
+        print(m_norm_dot)
+        dots_size= m_norm_dot.size
+#        plt.scatter(np.arange(dots_size),m_norm_dot,s =1)
+        #print(blocks)
+#        plt.plot([0,dots_size],[0,0],alpha=0.2)
+        for ind in div_ind[0]:
+            y = np.array([-0.5,1])
+#            plt.gca().fill_betweenx(y,[ind-seq,ind-seq],[ind+seq,ind+seq],fc="red",alpha=0.3)
+#        plt.gca().set_ylim([-0.5,1.1])
+#        plt.show()
+
+        #回帰直線を引く
+
+        r = report.loc[:,"radar.r"].values
+#        plt.scatter(report.index.values,r)
+#        plt.gca().set_ylim(0,None)
+        theta = np.linspace(0,2*np.pi,LiDar.sampling_rate)
+        est_coords = r.reshape(-1,1)*np.array([np.cos(theta),np.sin(theta)]).T
+        print(est_coords)
+        est_err(est_coords)
+#        plt.show()
+
+        # @title 一回Estimateで辺と頂点を抽出してみたい(モーションディストーションなし)
+        plt.title("predicted_value_from_Lidar")
+        thetas = np.linspace(np.pi/2-LiDar.HFOV/2,np.pi/2+LiDar.HFOV/2,1440)
+        points_coord = cvt_polar2xy(r,np.linspace(np.pi/2-LiDar.HFOV/2,np.pi/2+LiDar.HFOV/2,1440))
+        plt.scatter(*points_coord.T)
+        plt.gca().set_xlim([-4000,4000])
+        plt.gca().set_ylim([0,4000])
+        plt.gca().set_aspect('equal')
+
+        # まず視界に映る地形を分ける
+        gap_inds = np.where(np.abs(r[1:]-r[:-1])>=750)[0] + 1
+        print(gap_inds)
+        gap_inds = [None,*gap_inds,None]
+        clusters = []
+        for gap_ind1,gap_ind2 in zip(gap_inds[:-1],gap_inds[1:]):
+            plt.scatter(*cvt_polar2xy(r[slice(gap_ind1,gap_ind2)],thetas[slice(gap_ind1,gap_ind2)]).T)
+            clusters.append(cvt_polar2xy(r[slice(gap_ind1,gap_ind2)],thetas[slice(gap_ind1,gap_ind2)]))
+
+        # 傾きを二つに分ける
+        # 一度n-1番目から見たn番目の位置ベクトルをだして, gap_ind番目の部分は入れないようにする
+        delta = (points_coord[1:]-points_coord[:-1])#[bool_base]
+        dir = delta[:,1]/delta[:,0]
+        result =[]
+        for data in [dir[dir>0],dir[dir<0]]:
+            # 四分位数の計算
+            Q1 = np.percentile(data, 25)  # 第1四分位数
+            Q3 = np.percentile(data, 75)  # 第3四分位数
+            IQR = Q3 - Q1
+
+            # 外れ値(IQR法)の範囲
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            result.append(np.mean(data[(data > lower_bound) & (data<upper_bound)]))
+
+        ##
+        while True:
+            for cluster in clusters:
+                for ct in cluster:
+                    print(ct)
+            break
+        print(result)
         plt.show()
+
+
 
 def main(args=None):
     rclpy.init(args=args)
