@@ -30,7 +30,7 @@ private:
         cmd1.mode = 1;
         cmd1.target = (-0.5f * cos + 0.866f * sin) * 1000.0f;
         msg.motors.push_back(cmd1);
-
+/
         //motor2
         robomas_interfaces::msg::MotorCommand cmd2;
         cmd2.motor_id = 2;
