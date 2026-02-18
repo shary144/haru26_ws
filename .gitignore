@@ -2,6 +2,6 @@ build/
 install/
 log/
 misusrc/
-
+zikoiti/
 *.webp
 .rviz2.rviz
