@@ -162,3 +162,8 @@ report.loc[0,("robot.x","robot.y","robot.angular")] = (700,0,np.pi/4)
 report.loc[0,("robot.v.x","robot.v.y","robot.angular_v")] = (5000,-5000,0)
 
 # radar.rとradar.angularを送ってあげればOK
+# LiDARから欲しいもの...距離データの配列
+# これからやること...ライダーから取得した角度と距離の情報を、reportというデータコンテナに入れる。
+# それを使って、rvizに投影。
+# さらに、それを25Hzで更新する。
+# まとめると、シミュレーションで使っていた情報をLiDARに置き換える、ということを行う。pythonでプロットしていたものをrvizの空間に落とし込む必要がある。
