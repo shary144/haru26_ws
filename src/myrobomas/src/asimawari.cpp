@@ -1,4 +1,4 @@
-#include <rclcpp/rclcpp.hpp> //変更します
+#include <rclcpp/rclcpp.hpp>
 #include <vector>
 #include <sensor_msgs/msg/joy.hpp>
 // カスタムメッセージのインポート

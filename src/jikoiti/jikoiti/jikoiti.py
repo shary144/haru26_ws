@@ -1,13 +1,14 @@
-#とりあえず関数定義の部分だけ作ってしまいます。
-
 # ---import---
-import numpy as np #配列を用いる
-import matplotlib.pyplot as plt #実用上ではあまり必要ないかも
+import rclpy #Node使いたい
+from rclpy.node import Node #node使いたい
+from sensor_msgs.msg import LaserScan, PointCloud2
+import sensor_msgs_py.point_cloud2 as pc2
+from std_msgs.msg import Header
+
 import functools #関数を高度につかえるようにするやつ？解説求む
-
-import pandas as pd #シミュレータ用
+import pandas as pd #LiDARの情報を書き込む
 import dataclasses #C++のclassのような書き方をできるようにする
-
+import numpy as np #NumPyを使いたい
 
 # ---関数、classなど---
 #機体の最初の座標と向き、また進む距離と曲がる方向を入手して、x, y座標に変換
@@ -140,30 +141,74 @@ def lidar_scan_noise(r_true_array):
 
     return r_true_array + normal_noise + outlier
 
-# ---実行用のコード---
+# グローバル変数にするのは良くないかもしれません。ごめんなさい。
 item = ["t","robot.a.x","robot.a.y","robot.v.x","robot.v.y","robot.x","robot.y",
         "robot.angular_a","robot.angular_v","robot.angular",
         "radar.coord.x","radar.coord.y","radar.angular",
         "radar.r","spot.x","spot.y"]
 report = pd.DataFrame(columns = item)
 
-t = np.linspace(0, LiDar.f, LiDar.sampling_rate)
-report.loc[:,"t"]= t
+# Nodeを作成する
+class LidarNode(Node):
+    def __init__(self):
+        super().__init__('jikoiti')
 
-###初期値の設定
-t_cond = report.loc[:,"t"] < 0.05
-# データコンテナとしてreport(pd.DataFrame)使う
-report.loc[t_cond,"robot.a.x"] = 0
-report.loc[~t_cond,"robot.a.x"] = 2000
-report.loc[t_cond,"robot.a.y"] = -2000
-report.loc[~t_cond,"robot.a.y"] = 0
-report.loc[:,"robot.angular_a"] = 100
-report.loc[0,("robot.x","robot.y","robot.angular")] = (700,0,np.pi/4)
-report.loc[0,("robot.v.x","robot.v.y","robot.angular_v")] = (5000,-5000,0)
+        self.scan_sub = self.create_subscription( # LiDARの情報を入手する
+            LaserScan,
+            '/scan',
+            self.scan_callback,
+            10
+        )
 
-# radar.rとradar.angularを送ってあげればOK
-# LiDARから欲しいもの...距離データの配列
-# これからやること...ライダーから取得した角度と距離の情報を、reportというデータコンテナに入れる。
-# それを使って、rvizに投影。
-# さらに、それを25Hzで更新する。
-# まとめると、シミュレーションで使っていた情報をLiDARに置き換える、ということを行う。pythonでプロットしていたものをrvizの空間に落とし込む必要がある。
+        self.point_pub = self.create_publisher(PointCloud2, '/rviz_point', 10)
+
+        self.get_logger().info("LiDARからの情報の受信開始")
+
+    def scan_callback(self, msg: LaserScan):
+        ranges = np.array(msg.ranges)
+        angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
+
+        report["radar.noisy_r"] = ranges
+        noisy_r = report["radar.noisy_r"].values
+        theta = angles
+
+        # --- ここから ---
+        # 1. RVizがエラーを起こさないように inf や nan を弾く
+        valid_mask = np.isfinite(noisy_r)
+        r_valid = noisy_r[valid_mask]
+        theta_valid = theta[valid_mask]
+
+        # 2. ご提案いただいたスマートなブロードキャスト計算！
+        coord_2d = r_valid.reshape(-1, 1) * np.array([np.cos(theta_valid), np.sin(theta_valid)]).T
+
+        # 3. Z座標(0)を右側にガッチャンコして3D座標にする
+        coord_3d = np.column_stack((coord_2d, np.zeros(len(coord_2d))))
+        # --- ここまで ---
+
+        # RVizへパブリッシュ
+        self.publish_to_rviz(coord_3d, msg.header.frame_id)
+
+    def publish_to_rviz(self, coord_3d, frame_id):
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = frame_id # 例: 'laser_frame' など
+
+        # tolist() でPythonの標準リストに戻して PointCloud2 を作成
+        cloud_msg = pc2.create_cloud_xyz32(header, coord_3d.tolist())
+        self.point_pub.publish(cloud_msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = LidarNode()
+    try:
+        rclpy.spin(node) # 常にLiDARを待ち受け、データが来たらscan_callbackを回し続ける
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
