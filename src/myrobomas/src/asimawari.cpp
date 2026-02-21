@@ -56,6 +56,7 @@ private:
         cmd2.motor_id = 2;
         cmd2.mode = 1;
         cmd2.target = (-0.5f * cos - 0.866f * sin) * 1000.0f;
+        msg.motors.push_back(cmd2);
 
         //motor3(足回り)
         robomas_interfaces::msg::MotorCommand cmd3;
@@ -63,21 +64,29 @@ private:
         cmd3.mode = 1;
         cmd3.target = cos * 1000.0f;
         msg.motors.push_back(cmd3);
-
 /*
-        //motor4(昇降)
+        //motor4(射出)
         robomas_interfaces::msg::MotorCommand cmd4;
         cmd4.motor_id = 4;
-        cmd4.mode = ;
-        cmd4.target = ;
+        cmd4.mode = 0;
+        cmd4.target = -10000.0f * joyinfo->axes[3]; // 右スティック上で射出
         msg.motors.push_back(cmd4);
 */
+
+        //motor5(昇降)
+        robomas_interfaces::msg::MotorCommand cmd5;
+        cmd5.motor_id = 5;
+        cmd5.mode = 1;
+        cmd5.target = -1000.0f * joyinfo->axes[3]; // 右スティック上で射出
+        msg.motors.push_back(cmd5);
 
         // Publish!
         pub_motor_->publish(msg);
 
+        std::cout << "jushin" << std::endl;
+
         
-        if (joyinfo->axes[0]) {// Aボタンが押されたら
+        if (joyinfo->buttons[0]) {// Aボタンが押されたら
             send_can_on(); // 電磁弁に電流が送られる
         }
         else { // Aボタンを離したら
