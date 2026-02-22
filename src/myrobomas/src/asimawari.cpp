@@ -20,7 +20,7 @@ public:
 private:
     void send_can_on() { // 電磁弁に電流を送る
         auto msg_on = robomas_interfaces::msg::CanFrame();
-        msg_on.id = 0x000;         // 送信したいCAN ID
+        msg_on.id = 0x000;         // 送信したいCAN ID (0にしています)
         msg_on.dlc = 8;            // データ長
         msg_on.data = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // 電流を送りましょう
         
