@@ -20,7 +20,7 @@ public:
 private:
     void send_can_on() { // 電磁弁に電流を送る
         auto msg_on = robomas_interfaces::msg::CanFrame();
-        msg_on.id = 0x111;         // 送信したいCAN ID
+        msg_on.id = 0x000;         // 送信したいCAN ID
         msg_on.dlc = 8;            // データ長
         msg_on.data = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // 電流を送りましょう
         
@@ -29,7 +29,7 @@ private:
 
     void send_can_off() { // 電磁弁に流れる電流を止める
         auto msg_off = robomas_interfaces::msg::CanFrame();
-        msg_off.id = 0x111;         // 送信したいCAN ID
+        msg_off.id = 0x000;         // 送信したいCAN ID (0にしています)
         msg_off.dlc = 8;            // データ長
         msg_off.data = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // 電流を止めましょう
         
@@ -64,32 +64,28 @@ private:
         cmd3.mode = 1;
         cmd3.target = cos * 1000.0f;
         msg.motors.push_back(cmd3);
-/*
+
         //motor4(射出)
         robomas_interfaces::msg::MotorCommand cmd4;
         cmd4.motor_id = 4;
         cmd4.mode = 0;
-        cmd4.target = -10000.0f * joyinfo->axes[3]; // 右スティック上で射出
+        cmd4.target = -10000.0f * (joyinfo->buttons[3] - joyinfo->buttons[1]); // Yボタンで上昇、Aボタンで下降
         msg.motors.push_back(cmd4);
-*/
 
         //motor5(昇降)
         robomas_interfaces::msg::MotorCommand cmd5;
         cmd5.motor_id = 5;
         cmd5.mode = 1;
-        cmd5.target = -1000.0f * joyinfo->axes[3]; // 右スティック上で射出
+        cmd5.target = -1000.0f * joyinfo->axes[3]; // 右スティックで上昇、下降
         msg.motors.push_back(cmd5);
 
         // Publish!
         pub_motor_->publish(msg);
-
-        std::cout << "jushin" << std::endl;
-
         
-        if (joyinfo->buttons[0]) {// Aボタンが押されたら
+        if (joyinfo->buttons[0]) {// Xボタンが押されたら
             send_can_on(); // 電磁弁に電流が送られる
         }
-        else { // Aボタンを離したら
+        else { // Xボタンを離したら
             send_can_off(); // 電流が止まる
         }
     }
