@@ -1,0 +1,9 @@
+<launch>
+    <node pkg="rclcpp_components" exec="component_container" name="odometry_bridge">
+    
+    </node>
+    <load_composable_node target="odometry_bridge">
+        <composable_node pkg="odometry_plugins" plugin="odometry_bridge::OdometryBridge" name="odometry_bridge">
+        </composable_node>
+    </load_composable_node>
+</launch>
