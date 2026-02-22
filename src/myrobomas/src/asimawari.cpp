@@ -1,4 +1,4 @@
-#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/rclcpp.hpp> // 自動保存されません
 #include <vector>
 #include <sensor_msgs/msg/joy.hpp>
 // カスタムメッセージのインポート
@@ -20,7 +20,7 @@ public:
 private:
     void send_can_on() { // 電磁弁に電流を送る
         auto msg_on = robomas_interfaces::msg::CanFrame();
-        msg_on.id = 0x000;         // 送信したいCAN ID (0にしています)
+        msg_on.id = 0x100;         // 送信したいCAN ID (256にしています)
         msg_on.dlc = 8;            // データ長
         msg_on.data = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // 電流を送りましょう
         
@@ -29,7 +29,7 @@ private:
 
     void send_can_off() { // 電磁弁に流れる電流を止める
         auto msg_off = robomas_interfaces::msg::CanFrame();
-        msg_off.id = 0x000;         // 送信したいCAN ID (0にしています)
+        msg_off.id = 0x100;         // 送信したいCAN ID (256にしています)
         msg_off.dlc = 8;            // データ長
         msg_off.data = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // 電流を止めましょう
         
