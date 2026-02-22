@@ -11,7 +11,8 @@ ros2 topic echo /joy<ノード名>
 このコードを使って、ロボマスを動かす手順
 sudo chmod 777 /dev/ttyACM0を入力して、権限を付与
 
-ros2 launchでノードを起動する
+ros2 launch robomas_controller robomas_bridge.launch.py
+でノードを起動する
 
 ロボマスに電圧を与えます（赤いスイッチを解除する）
 
@@ -23,7 +24,7 @@ ros2 launchでノードを起動する
 後は、
 ros2 run myrobomas my_robot_nodeを実行すると、私のコードが動きます。
 だけど、
-ros2 run joy<パッケージ名> joy_node<ノード名>
+ros2 run joy joy_node
 これも必要です。
 これで、topic[/joy]に、コントローラーの情報が流れる
 
