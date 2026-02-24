@@ -165,8 +165,9 @@ class LidarNode(Node):
         self.get_logger().info("LiDARからの情報の受信開始")
 
     def scan_callback(self, msg: LaserScan):
-        ranges = np.array(msg.ranges)
+        ranges = np.array(msg.ranges) #ここが入力か
         angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
+        ## == ここから自己位置推定処理ね == 
 
         report["radar.noisy_r"] = ranges
         noisy_r = report["radar.noisy_r"].values
