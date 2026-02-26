@@ -18,6 +18,9 @@ find_package(tf2_geometry_msgs REQUIRED)
 add_executable(pure_pursuit_node
   src/pure_pursuit.cpp
 )
+add_executable(icp_tf_broadcaster
+  src/icp_tf_broadcaster.cpp
+)
 
 # --- Link dependencies ---
 ament_target_dependencies(pure_pursuit_node
@@ -29,9 +32,18 @@ ament_target_dependencies(pure_pursuit_node
   tf2_geometry_msgs
 )
 
+ament_target_dependencies(icp_tf_broadcaster
+  rclcpp
+  geometry_msgs
+  nav_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
 # --- Install ---
 install(TARGETS
   pure_pursuit_node
+  icp_tf_broadcaster
   DESTINATION lib/${PROJECT_NAME}
 )
 
