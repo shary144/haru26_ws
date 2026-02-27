@@ -107,7 +107,7 @@ VectorXd icp(double x, double y, double th, MatrixXd LiDAR)
   //この値が重要
   ///////////////////////////
 
-  const double max_dist  = 0.03;
+  const double max_dist  = 0.1;
   const double max_dist2 = max_dist * max_dist;
 ///////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////
@@ -313,8 +313,8 @@ class IcpLocalizationNode : public rclcpp::Node
 public:
   IcpLocalizationNode()
   : rclcpp::Node("icp_localization_node"),
-    x_(0.2),
-    y_(0.2),
+    x_(1),
+    y_(3),
     th_(0.0),
     dx_(0.0),
     dy_(0.0),

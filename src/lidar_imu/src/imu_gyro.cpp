@@ -167,8 +167,8 @@ public:
     R_.setIdentity();
     last_time_valid_ = false;
 
-    x_ = 0.2;
-    y_ = 0.2;
+    x_ = 1;
+    y_ = 3;
     z_ = 0.05;
     vx_= 0.0;
     vy_= 0.0;
