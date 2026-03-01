@@ -1,10 +1,23 @@
 ball_detector:
   ros__parameters:
-    camera_offset_x: 
-    camera_offset_y:
-    camera_offset_roll:
-    camera_offset_pitch:
-    camera_offset_yaw:
+    trackbar_initialized: false
+    h_low_r: 0
+    h_high_r: 17
+    s_low_r: 80
+    s_high_r: 255
+    v_low_r: 80
+    v_high_r: 255
+    h_low_r2: 169
+    h_high_r2: 179
+    h_low_b: 85
+    h_high_b: 130
+    s_low_b: 0
+    s_high_b: 255
+    v_low_b: 0
+    v_high_b: 255
+    h_low_g: 35
+    h_high_g: 85
+    s_low_g: 0
     red_threshold: 0.8
     blue_threshold: 0.7
     green_threshold: 0.75
@@ -14,7 +27,11 @@ my_pursuit_node:
     lidar_offset_x: 0.286
     lidar_offset_y: -0.165
     lidar_offset_yaw: -1.047
+    L: 0.33
     nav_radius: 0.3
+    pgain_x: 0.5
+    pgain_y: 1.0
+    pgain_theta: 1.0
 
 navigater_node:
   ros__parameters:
@@ -24,12 +41,5 @@ navigater_node:
     notezone_entrance: [0.35, 5.888]
     wallDistance: 0.35
 
-undercarriage_node:
-  ros__parameters:
-    max_speed: 0.5
-    max_angular_speed: 1.0
-    wheel_base: 0.3
-    pgain: 1.0
-    igain: 0.0
-    dgain: 0.1
+
     

@@ -13,6 +13,15 @@ find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/BallArray.msg"
+  "msg/Ball.msg"
+  "msg/Target.msg"
+  "msg/TargetStatus.msg"
+)
 
 # --- Executable ---
 add_executable(pure_pursuit_node
@@ -40,6 +49,7 @@ ament_target_dependencies(icp_tf_broadcaster
   tf2_ros
   tf2_geometry_msgs
 )
+
 # --- Install ---
 install(TARGETS
   pure_pursuit_node
@@ -59,4 +69,5 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+ament_export_dependencies(rosidl_default_runtime)
 ament_package()

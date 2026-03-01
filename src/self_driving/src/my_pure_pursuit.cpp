@@ -7,51 +7,74 @@
 #include <deque>
 #include <map>
 #include <cmath>
-// route_before_shoot_(kind,back=True) -> (<aftershoot>? 1:0)
-// kind_<status>
-// || .route_<status>
-//    .route_index_<status>
+#include <algorithm>
 
-// [callback]pursuit(
-// lookup_x
-// lookup_y
-// est_x
-// est_y
-// est_yaw
-// ) ~> "/robomas/cmd"
 
-#define INCLUDE_MEMBER_PARAM(type, name) \
-  type name; \
-  this->declare_parameter<type>(#name); \
-  this->get_parameter(#name, name);
+#define INIT_PARAM(name) \
+    this->declare_parameter<decltype(name)>(#name); \
+    this->get_parameter(#name, name);
 
 class NavNode : public rclcpp::Node
 {
 public:
     NavNode()
-    : Node("nav_node"),
-      e_(0.3),
-      pgain_(1.5),
-      route_index_(0)
+    : Node("nav_node")
     {
+        INIT_PARAM(lidar_offset_x) //yamlファイル参照
+        INIT_PARAM(lidar_offset_y)
+        INIT_PARAM(lidar_offset_yaw)
+        INIT_PARAM(nav_radius)
+        INIT_PARAM(wheel_base)
+        INIT_PARAM(pgain_x)
+        INIT_PARAM(pgain_y)
+        INIT_PARAM(pgain_theta)
+        INIT_PARAM(L)
+
         // ICP 推定結果の購読
         sub_pose_ = create_subscription<std_msgs::msg::Float32MultiArray>(
             "/robot_pose_icp", 10,
             std::bind(&NavNode::pose_callback, this, std::placeholders::_1)
         );
-
+        // 目標値の購読
+        sub_target_ = create_subscription<self_driving::msg::Target>(
+            "/target_pose", 10,
+            std::bind(&NavNode::target_callback, this, std::placeholders::_1)
+        );
         // publisher_cmd
-        pub_cmd_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>("/robomas/cmd", 10);
-
-        // 今回は red を例として使用
-        set_route("red");
+        pub_cmd_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>(
+            "/robomas/cmd", 10);
+        // 到達ステータスをpublish
+        pub_status_ = this->create_publisher<self_driving::msg::TargetStatus>(
+            "/pursuit/status", 10);
     }
 
 private:
-    INCLUDE_MEMBER_PARAM(double, lidar_offset_x)
-    INCLUDE_MEMBER_PARAM(double, lidar_offset_y)
-    INCLUDE_MEMBER_PARAM(double, lidar_offset_yaw)
-    INCLUDE_MEMBER_PARAM(double, nav_radius)
+    // クラス要素一覧 ======================
+    double lidar_offset_x;
+    double lidar_offset_y;
+    double lidar_offset_yaw;
+    double nav_radius;
+    double wheel_base;
+    double pgain_x;
+    double pgain_y;
+    double pgain_theta;
+    double L;
+
+    rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_;
+    rclcpp::Subscription<self_driving::msg::Target>::SharedPtr sub_target_;
+    rclcpp::Publisher<robomas_interfaces::msg::RobomasPacket>::SharedPtr pub_cmd_;
+    rclcpp::Publisher<self_driving::msg::TargetStatus>::SharedPtr pub_status_;
+
+    std::deque<std::array<double,3>> history_; // 履歴用
+    self_driving::msg::Target latest_target_; // 最新の目標値
+
+    //メンバ関数
+    void pose_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg);
+    void publish_cmd(double vx, double vy, double wz);
+    void navigate(double x, double y, double yaw, double target_x, double target_y, double target_yaw);
+    void add_history(double x, double y, double yaw);
+    
+
     // ==========================
     // ICP callback
     // ==========================
@@ -63,102 +86,115 @@ private:
         double x   = msg->data[0];
         double y   = msg->data[1];
         double yaw = msg->data[2];
-
-        //あんま自信ないけどlidarの位置と向きを考慮してロボットの位置と向きを逆算
-        double robot_x = x + lidar_offset_x * std::cos(yaw-lidar_offset_yaw);
-        double robot_y = y + lidar_offset_y * std::sin(yaw-lidar_offset_yaw);
-        double robot_yaw = yaw - lidar_offset_yaw;
-        
-    
         // ---- 平均化したい場合はここを ON ----
         // add_history(x, y, yaw);
         // auto [fx, fy, fyaw] = filtered_pose();
-        // navigate(fx, fy, fyaw);
         // -------------------------------------
 
+
+        //あんま自信ないけどlidarの位置と向きを考慮してロボットの位置と向きを逆算
+        double robot_x = x + this->lidar_offset_x * std::cos(yaw) - this->lidar_offset_y * std::sin(yaw);
+        double robot_y = y + this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
+        double robot_yaw = yaw - this->lidar_offset_yaw;
+
         // 平均化しない場合はこちら
-        navigate(robot_x, robot_y, robot_yaw);
+        // まだ一度も受信していないか判別(ゴミ値対策)
+        
+        if (!this->latest_target_) return;
+
+        float tx = this->latest_target_.x;//目標値
+        float ty = this->latest_target_.y;
+        float tyaw = this->latest_target_.yaw;
+
+        navigate(robot_x, robot_y, robot_yaw, tx, ty, tyaw);
     }
 
-
+    void target_callback(const self_driving::msg::Target::SharedPtr msg)
+    {   
+        latest_target_ = *msg;
+    }
+    
 
     // ==========================
     // ナビゲーション本体
     // ==========================
-    void navigate(double x, double y, double yaw)
+    void NavNode::navigate(double x, double y, double yaw, double target_x, double target_y, double target_yaw)
     {
-        // ルート完了判定
         if (route_index_ >= route_.size()) {
-            RCLCPP_INFO(get_logger(), "Route finished!");
             publish_stop();
             return;
         }
+        //P制御
 
-        auto target = route_[route_index_];
-        double tx = target[0];
-        double ty = target[1];
-        
-        double dx = tx - x;
-        double dy = ty - y;
-        double dist = std::sqrt(dx*dx + dy*dy);
+        // 世界座標での誤差
+        double ex = target_x - x;
+        double ey = target_y - y;
+        double e_yaw = normalize_angle(target_yaw - yaw);
+
+        // ロボット座標系へ変換
+        double ex_b =  cos(yaw) * ex + sin(yaw) * ey;
+        double ey_b = -sin(yaw) * ex + cos(yaw) * ey;
+
+        // 制御入力
+        double vx = this->pgain_x * ex_b;
+        double vy = this->pgain_y * ey_b;
+        double wz = this->pgain_theta * e_yaw;
+
+        // 安定化のための制限
+        vx = std::clamp(vx, -0.3, 0.3);
+        vy = std::clamp(vy, -0.3, 0.3);
+        wz = std::clamp(wz, -1.5, 1.5);
 
         // 到達判定
-        if (dist < e_) {
-            RCLCPP_INFO(get_logger(), "Reached waypoint %zu at %s", route_index_, kind.c_str());
-            route_index_++;
-            if (route_index_ >= route_.size()) {
-                RCLCPP_INFO(get_logger(), "Route finished!");
-                set_route("");
-                return;
-            }
+        double dist = std::sqrt(ex*ex + ey*ey);
+        if (dist < nav_radius_) {
+            publish_stop();
+            // ここで TargetStatus を publish してもいい
             return;
         }
 
-        // 目標方向
-        double target_yaw = std::atan2(dy, dx);
-        double yaw_error = normalize_angle(target_yaw - yaw);
-
-        // 簡易 P 制御
-        double wz = pgain_ * yaw_error;   // 角速度
-        double vx = 0.3;               // 前進速度（固定）
-
-        // 角度が大きくズレているときは回転優先
-        if (std::fabs(yaw_error) > 0.5) {
-            vx = 0.0;
-        }
-
-        publish_cmd(vx, wz);
+        publish_cmd(vx, vy, wz);
     }
 
     // ==========================
     // 速度 publish
     // ==========================
-    void publish_cmd(double vx, double wz)
+    void publish_cmd(double vx, double vy, double wz)
     {
+        double vw1 = -0.5 * vx + 0.866 * vy + this->L * wz;  // 前左（+60°）
+        double vw2 = -0.5 * vx - 0.866 * vy + this->L * wz;  // 前右（-60°）
+        double vw3 =  1.0 * vx + this->L * wz; // 後ろ（180°）
+        double max_w = std::max({std::abs(vw1), std::abs(vw2), std::abs(vw3)});
+        if (max_w==0.0) max_w = 1.0; // ゼロ割防止
+
+        if (max_w > max_motor_speed) {
+            double scale = 1000.0f / max_w;
+            vw1 *= scale;
+            vw2 *= scale;
+            vw3 *= scale;
+        }
+
         auto msg = robomas_interfaces::msg::RobomasPacket();
-        
-        float cos = vx * std::cos(wz); //左スティックX
-        float sin = vx * std::sin(wz); //左スティックY
-        
+
         //motor1(足回り)
         robomas_interfaces::msg::MotorCommand cmd1;
         cmd1.motor_id = 1;
         cmd1.mode = 1;
-        cmd1.target = (-0.5f * cos + 0.866f * sin) * 1000.0f;
+        cmd1.target = vw1;
         msg.motors.push_back(cmd1);
 
         //motor2(足回り)
         robomas_interfaces::msg::MotorCommand cmd2;
         cmd2.motor_id = 2;
         cmd2.mode = 1;
-        cmd2.target = (-0.5f * cos - 0.866f * sin) * 1000.0f;
+        cmd2.target = vw2;
         msg.motors.push_back(cmd2);
 
         //motor3(足回り)
         robomas_interfaces::msg::MotorCommand cmd3;
         cmd3.motor_id = 3;
         cmd3.mode = 1;
-        cmd3.target = cos * 1000.0f;
+        cmd3.target = vw3;
         msg.motors.push_back(cmd3);
         
         pub_cmd_->publish(msg);
@@ -199,25 +235,6 @@ private:
         size_t n = history_.size();
         return {sx/n, sy/n, syaw/n};
     }
-
-    // ==========================
-    // メンバ変数
-    // ==========================
-    rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_;
-    rclcpp::Publisher<robomas_interfaces::msg::RobomasPacket>::SharedPtr pub_cmd_;
-
-    std::map<std::string, std::vector<std::array<double,2>>> routes_;
-    std::vector<std::array<double,2>> route_;
-    size_t route_index_;
-
-    double e_;  // waypoint 到達判定の半径
-    double pgain_; // P 制御のゲイン
-
-    double offset_r = 0.33f; //lidarの取付位置のロボット座標原点からの距離
-    double offset_theta = 4/3*M_PI; //lidarの取付位置のロボット正面を基準にした角度
-    double offset_yaw = 4/3*M_PI; //lidarの取り付け向きのロボット正面からの角度
-
-    std::deque<std::array<double,3>> history_; // 平均化用
 };
 
 int main(int argc, char **argv)
