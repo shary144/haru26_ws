@@ -22,7 +22,7 @@ ball_detector:
     blue_threshold: 0.7
     green_threshold: 0.75
 
-my_pursuit_node:
+my_pure_pursuit_node:
   ros__parameters:
     lidar_offset_x: 0.286
     lidar_offset_y: -0.165

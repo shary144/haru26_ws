@@ -6,50 +6,46 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include <vector>
+#include "self_driving/msg/target_status.hpp"
+#include "self_driving/msg/target.hpp"
 
-#define INCLUDE_MEMBER_PARAM(type, name) \
-  type name; \
-  this->declare_parameter<type>(#name); \
-  this->get_parameter(#name, name);
-
-
-class NavigaterNode : public rclcpp::Node
+class ManagerNode : public rclcpp::Node
 {
 public:
-    NavigateNode()
-    : Node("navigater_node")
+    ManagerNode()
+    : Node("manager_node")
     {
-        sub_res_ = create_subscription<std_msgs::msg::Float32MultiArray>(
+        sub_status_ = create_subscription<self_driving::msg::TargetStatus>(
             "pursuit/status", 10,
-            std::bind(&NavigaterNode::callback, this, std::placeholders::_1)
+            std::bind(&ManagerNode::callback, this, std::placeholders::_1)
         );
-        pub_pose_ = this->create_publisher<std_msgs::msg::Float32MultiArray>(
-            "pursuit/target", 10
+        pub_pose_ = this->create_publisher<self_driving::msg::Target>(
+            "target_pose", 10
         );//QoSは10でいいのか？要検討
     }
 private:
     //ここはパラメータの宣言と取得。yamlの数値ををここで同名のメンバ変数として定義している。
-    INCLUDE_MEMBER_PARAM(std::vector<double>, blue_nav_point)
-    INCLUDE_MEMBER_PARAM(std::vector<double>, yellow_nav_point)
-    INCLUDE_MEMBER_PARAM(std::vector<double>, red_nav_point)
-    INCLUDE_MEMBER_PARAM(std::vector<double>, notezone_entrance)
-    INCLUDE_MEMBER_PARAM(double, wallDistance)
-
+    std::map<std::string, std::vector<std::array<double, 3>>> routes_{
+        {"route1", {{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 1.57}}},
+        {"route2", {{0.0, 0.0, 0.0}, {1.0, -1.0, -1.57}, {2.0, -1.0, -1.57}}}
+    };
+    std::vector<std::array<double, 3>> route_;
+    int route_index_ = 0;
     color_queue_ = std::queue<std::string>();
     void set_route(const std::string &kind);
     void publish_target(double x, double y, double yaw)
     {
-        std_msgs::msg::Float32MultiArray msg;
-        msg.data.push_back(x);
-        msg.data.push_back(y);
-        msg.data.push_back(yaw);
+        self_driving::msg::Target msg;
+        msg.x=x;
+        msg.y=y;
+        msg.yaw=yaw;
         pub_pose_->publish(msg);
     }
 
     // ==========================
     // pursuit/status コールバック
     // ==========================
-    void callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg){
+    void callback(const self_driving::msg::TargetStatus::SharedPtr msg){
         msg.index
         if (msg.status) {
             
@@ -70,20 +66,14 @@ private:
     // ==========================
     void navigate(double x, double y, double yaw)
     {
+        this->sub_status_->
         // ルート完了判定
         if (route_index_ >= route_.size()) {
             RCLCPP_INFO(get_logger(), "Route finished!");
             publish_stop();
             return;
         }
-
-        auto target = route_[route_index_];
-        double tx = target[0];
-        double ty = target[1];
-        
-        double dx = tx - x;
-        double dy = ty - y;
-        double dist = std::sqrt(dx*dx + dy*dy);
+    }
 
 
 }

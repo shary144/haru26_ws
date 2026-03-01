@@ -1,4 +1,4 @@
 uint8 index
-float16 x
-float16 y
-float16 yaw
+float32 x
+float32 y
+float32 yaw
