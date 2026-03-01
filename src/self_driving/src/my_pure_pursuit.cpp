@@ -19,6 +19,12 @@
 // est_y
 // est_yaw
 // ) ~> "/robomas/cmd"
+
+#define INCLUDE_MEMBER_PARAM(type, name) \
+  type name; \
+  this->declare_parameter<type>(#name); \
+  this->get_parameter(#name, name);
+
 class NavNode : public rclcpp::Node
 {
 public:
@@ -37,44 +43,21 @@ public:
         // publisher_cmd
         pub_cmd_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>("/robomas/cmd", 10);
 
-        // ルート定義
-        routes_ = {
-            {"blue", {
-                {0.35, 5.888},
-                {0.35, 3.5},
-                {1.362, 3.5},//ここで射出
-                {0.35, 3.5},
-                {0.35, 5.888}
-            }},
-            {"yellow", {
-                {0.35, 5.888},
-                {0.35, 1.85},
-                {1.8 , 1.85},//ここで射出
-                {0.35, 1.85},
-                {0.35, 5.888}
-            }},
-            {"red", {
-                {0.35, 5.888},
-                {0.35 , 5.112},
-                {0.924, 5.112},//ここで射出
-                {0.35 , 5.112},
-                {0.35, 5.888}
-            }},
-            {"init",{
-                {0.35,5.888}
-            }}
-        };
-
         // 今回は red を例として使用
         set_route("red");
     }
 
 private:
+    INCLUDE_MEMBER_PARAM(double, lidar_offset_x)
+    INCLUDE_MEMBER_PARAM(double, lidar_offset_y)
+    INCLUDE_MEMBER_PARAM(double, lidar_offset_yaw)
+    INCLUDE_MEMBER_PARAM(double, nav_radius)
     // ==========================
     // ICP callback
     // ==========================
     void pose_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
     {
+        
         if (msg->data.size() < 3) return;
 
         double x   = msg->data[0];
@@ -82,10 +65,11 @@ private:
         double yaw = msg->data[2];
 
         //あんま自信ないけどlidarの位置と向きを考慮してロボットの位置と向きを逆算
-        double robot_x = x + offset_r * std::cos(yaw-offset_theta);
-        double robot_y = y + offset_r * std::sin(yaw-offset_theta);
-        double robot_yaw = yaw - offset_yaw;
-
+        double robot_x = x + lidar_offset_x * std::cos(yaw-lidar_offset_yaw);
+        double robot_y = y + lidar_offset_y * std::sin(yaw-lidar_offset_yaw);
+        double robot_yaw = yaw - lidar_offset_yaw;
+        
+    
         // ---- 平均化したい場合はここを ON ----
         // add_history(x, y, yaw);
         // auto [fx, fy, fyaw] = filtered_pose();
@@ -96,15 +80,7 @@ private:
         navigate(robot_x, robot_y, robot_yaw);
     }
 
-    // ==========================
-    // ルート設定
-    // ==========================
-    void set_route(const std::string &kind)
-    {
-        route_ = routes_[kind];
-        route_index_ = 0;
-        RCLCPP_INFO(get_logger(), "Route set: %s", kind.c_str());
-    }
+
 
     // ==========================
     // ナビゲーション本体
