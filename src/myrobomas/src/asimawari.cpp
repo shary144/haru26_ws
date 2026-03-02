@@ -48,21 +48,21 @@ private:
         robomas_interfaces::msg::MotorCommand cmd1;
         cmd1.motor_id = 1;
         cmd1.mode = 1;
-        cmd1.target = (-0.5f * cos + 0.866f * sin) * 1000.0f;
+        cmd1.target = (-0.5f * cos + 0.866f * sin + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
         msg.motors.push_back(cmd1);
 
         //motor2(足回り)
         robomas_interfaces::msg::MotorCommand cmd2;
         cmd2.motor_id = 2;
         cmd2.mode = 1;
-        cmd2.target = (-0.5f * cos - 0.866f * sin) * 1000.0f;
+        cmd2.target = (-0.5f * cos - 0.866f * sin + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
         msg.motors.push_back(cmd2);
 
         //motor3(足回り)
         robomas_interfaces::msg::MotorCommand cmd3;
         cmd3.motor_id = 3;
         cmd3.mode = 1;
-        cmd3.target = cos * 1000.0f;
+        cmd3.target = (cos + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
         msg.motors.push_back(cmd3);
 
         //motor4(射出)
