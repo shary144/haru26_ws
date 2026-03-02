@@ -155,12 +155,10 @@ private:
     double max_w = std::max({std::abs(vw1), std::abs(vw2), std::abs(vw3)});
     if (max_w == 0.0) max_w = 1.0; // ゼロ割防止
 
-    if (max_w > 1000.0f) {
-      double scale = 1000.0f / max_w;
-      vw1 *= scale;
-      vw2 *= scale;
-      vw3 *= scale;
-    }
+    double scale = 1000.0f / max_w;
+    vw1 *= scale;
+    vw2 *= scale;
+    vw3 *= scale;
 
     auto msg = robomas_interfaces::msg::RobomasPacket();
 
