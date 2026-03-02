@@ -27,7 +27,7 @@ public:
 
     // ICP 推定結果の購読
     sub_pose_ = create_subscription<std_msgs::msg::Float32MultiArray>(
-      "/robot_pose_icp", 10,
+      "robot_pose_icp", 10,
       std::bind(&NavNode::pose_callback, this, std::placeholders::_1));
 
     // 目標値の購読
@@ -85,7 +85,8 @@ private:
     double robot_y = y + this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
     double robot_yaw = yaw - this->lidar_offset_yaw;
 
-    // まだ一度も目標を受信していない場合は何もしない
+    // まだ一度も目標を受信していない
+    //or 目標に到達してから新しい目標を受信していない場合は何もしない
     if (!has_target_) return;
 
     double tx = this->latest_target_.x;   // 目標値
@@ -128,18 +129,18 @@ private:
 
     // 到達判定
     double dist = std::sqrt(ex * ex + ey * ey);
+    self_driving::msg::TargetStatus status;
     if (dist < nav_radius) {
       publish_stop();
 
       // ここで TargetStatus を publish してもいい
-      self_driving::msg::TargetStatus status;
       status.status= 1; // 到達
-      pub_status_->publish(status);
-
-      return;
+      has_target_ = false; // 新しい目標が来るまで動かないようにする
+    } else {
+      status.status= 0; // 未到達
+      publish_cmd(vx, vy, wz);
     }
-
-    publish_cmd(vx, vy, wz);
+    pub_status_->publish(status);
   }
 
   // ==========================

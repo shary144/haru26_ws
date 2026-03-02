@@ -33,6 +33,7 @@ ament_export_dependencies(rosidl_default_runtime std_msgs geometry_msgs)
 add_executable(pure_pursuit_node src/pure_pursuit.cpp)
 add_executable(icp_tf_broadcaster src/icp_tf_broadcaster.cpp)
 add_executable(my_pure_pursuit_node src/my_pure_pursuit.cpp)
+add_executable(manager_node src/manager.cpp)
 
 
 # --- Link dependencies ---
@@ -47,9 +48,15 @@ ament_target_dependencies(icp_tf_broadcaster
 ament_target_dependencies(my_pure_pursuit_node
   rclcpp std_msgs robomas_interfaces
 )
+ament_target_dependencies(manager_node
+  rclcpp std_msgs
+)
+
+
 # 生成されたメッセージヘッダーへの依存設定
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(my_pure_pursuit_node "${cpp_typesupport_target}")
+target_link_libraries(manager_node "${cpp_typesupport_target}")
 
 include_directories(include)
 
@@ -58,6 +65,7 @@ install(TARGETS
   pure_pursuit_node
   icp_tf_broadcaster
   my_pure_pursuit_node
+  manager_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

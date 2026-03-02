@@ -15,24 +15,44 @@ public:
     ManagerNode()
     : Node("manager_node")
     {
-        sub_status_ = create_subscription<self_driving::msg::TargetStatus>(
+        /*sub_status_ = create_subscription<self_driving::msg::TargetStatus>(
             "pursuit/status", 10,
             std::bind(&ManagerNode::callback, this, std::placeholders::_1)
-        );
+        );*/
         pub_pose_ = this->create_publisher<self_driving::msg::Target>(
             "target_pose", 10
         );//QoSは10でいいのか？要検討
+
+        timer_ = this->create_wall_timer(
+            std::chrono::milliseconds(500),
+            std::bind(&ManagerNode::publish_once, this)
+        );
     }
+
 private:
+    void publish_once() {
+        //目標値をpublishして挙動を確認
+        self_driving::msg::Target msg;
+        msg.index=0;
+        msg.x=1.0;
+        msg.y=2.0;
+        msg.yaw=0.5;
+        pub_pose_->publish(msg);
+        RCLCPP_INFO(get_logger(), "Published target pose: index=%d, x=%.2f, y=%.2f, yaw=%.2f", 
+                    msg.index, msg.x, msg.y, msg.yaw);
+    }
+/*
     //ここはパラメータの宣言と取得。yamlの数値ををここで同名のメンバ変数として定義している。
-    std::map<std::string, std::vector<std::array<double, 3>>> routes_{
-        {"route1", {{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 1.57}}},
-        {"route2", {{0.0, 0.0, 0.0}, {1.0, -1.0, -1.57}, {2.0, -1.0, -1.57}}}
-    };
     std::vector<std::array<double, 3>> route_;
     int route_index_ = 0;
-    color_queue_ = std::queue<std::string>();
+    double wallDistance = 0.35;
+    std::vector<std::vector<double>> blue_nav_point_ = {1.362, 3.5};
+    std::vector<std::vector<double>> yellow_nav_point_ = {1.8, 1.85};
+    std::vector<std::vector<double>> red_nav_point_ = {0.924, 5.112};
+    std::vector<std::vector<double>> notezone_entrance = {0.35, 5.888};
+    std::queue<std::string> color_queue_; // 残りの色を管理するキュー
     void set_route(const std::string &kind);
+
     void publish_target(double x, double y, double yaw)
     {
         self_driving::msg::Target msg;
@@ -57,6 +77,7 @@ private:
     // ==========================
     void set_route(const std::string &kind)
     {
+
         route_ = routes_[kind];
         route_index_ = 0;
         RCLCPP_INFO(get_logger(), "Route set: %s", kind.c_str());
@@ -75,5 +96,15 @@ private:
         }
     }
 
-
+*/
+    /*rclcpp::Subscription<self_driving::msg::TargetStatus>::SharedPtr sub_status_;*/
+    rclcpp::Publisher<self_driving::msg::Target>::SharedPtr pub_pose_;
+    rclcpp::TimerBase::SharedPtr timer_;   // ← これが必要！
+};
+int main(int argc, char **argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<ManagerNode>());
+  rclcpp::shutdown();
+  return 0;
 }
