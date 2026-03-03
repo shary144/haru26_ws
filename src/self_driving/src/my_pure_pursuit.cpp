@@ -95,6 +95,8 @@ private:
     double tx = this->latest_target_.x;   // 目標値
     double ty = this->latest_target_.y;
     double tyaw = this->latest_target_.yaw;
+    //ここに画像認識から推定した自己位置とlidarから推定した自己位置を
+    //"confidence"で内分して最終目標値にする
 
     navigate(robot_x, robot_y, robot_yaw, tx, ty, tyaw);
   }
