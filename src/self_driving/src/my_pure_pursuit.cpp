@@ -22,6 +22,7 @@ public:
   NavNode()
   : Node("my_pure_pursuit_node", 
     rclcpp::NodeOptions().allow_undeclared_parameters(true)
+    
   )
   {
 
@@ -42,6 +43,8 @@ public:
     // 到達ステータスをpublish
     pub_status_ = this->create_publisher<self_driving::msg::TargetStatus>(
       "/pursuit/status", 10);
+
+    RCLCPP_INFO(get_logger(), "my_pure_pursuit_node started");
   }
 
 private:
@@ -121,11 +124,12 @@ private:
     double vx = this->pgain_x * ex_b;
     double vy = this->pgain_y * ey_b;
     double wz = this->pgain_theta * e_yaw;
-
+    /*
     // 安定化のための制限
     vx = std::clamp(vx, -0.3, 0.3);
     vy = std::clamp(vy, -0.3, 0.3);
     wz = std::clamp(wz, -1.5, 1.5);
+    */
 
     // 到達判定
     double dist = std::sqrt(ex * ex + ey * ey);
