@@ -17,10 +17,10 @@ public:
     : Node("manager_node")
     {
         route_index_ = 0;
-        /*sub_status_ = create_subscription<self_driving::msg::TargetStatus>(
+        sub_status_ = create_subscription<self_driving::msg::TargetStatus>(
             "pursuit/status", 10,
             std::bind(&ManagerNode::callback, this, std::placeholders::_1)
-        );*/
+        );
         pub_pose_ = this->create_publisher<self_driving::msg::Target>(
             "target_pose", 10
         );
@@ -41,7 +41,10 @@ private:
         {"notezone_", {0.35, 5.888}}
     };
     std::vector<std::array<double, 3>> main_route;
-    int main_route_index_;
+    //制御順番を管理するための変数
+    std::vector<std::function<void()>> callback_chain;
+    int waypoint_id_; //単純にpublishした分連番でidを振る(クラス変数)
+    self_driving::msg::TargetStatus status_msg;
     
     //色ピックのステータス
     std::map<std::string, bool> colors_isleft = {
@@ -70,6 +73,12 @@ private:
             };
         }
     }
+    bool pursuit() {
+        //追従の完了を待って、次の目標値をpublishする関数
+        //pursuit_nodeから到達を検知したら終了→trueを返す
+        callback_msg
+        if  return true;
+    }
 
     void publish_once() {
         //目標値をpublishして挙動を確認(テスト用)
@@ -83,9 +92,11 @@ private:
                     msg.index, msg.x, msg.y, msg.yaw);
     }
     //
-    void follow_route(std::string kind) {
+    void update_route_status(self_driving::msg::TargetStatus)
+    bool follow_waypoint(std::string kind) {
         //ルートの達成を状態として持たせる
         auto route_segment = this->route_seg(kind);
+        //pursuit/statusをみて、追従が終わったら次の目標値をpublishする、という流れを作る
         for (const auto& point : route_segment) {
             this->publish_target(point[0], point[1], point[2]);
         }
@@ -94,6 +105,7 @@ private:
     void publish_target(double x, double y, double yaw)
     {
         self_driving::msg::Target msg;
+        msg.index = waypoint_id_;
         msg.x=x;
         msg.y=y;
         msg.yaw=yaw;
@@ -104,13 +116,10 @@ private:
     // pursuit/status コールバック
     // ==========================
     void callback(const self_driving::msg::TargetStatus::SharedPtr msg){
-        msg.index
-        if (msg.status) {
-            
-        } else
+        status_msg = *msg;
     }
 
-        // ==========================
+    // ==========================
     // ルート設定
     // ==========================
     void set_route(const std::string &kind)
