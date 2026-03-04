@@ -22,7 +22,15 @@
   <depend>robomas_interfaces</depend>
   <depend>std_msgs</depend>
 
+  <!-- Include するパッケージを依存に追加 -->
+  <exec_depend>lidar_imu</exec_depend>
+  <exec_depend>odometry_plugins</exec_depend>
+  <exec_depend>urg_node2</exec_depend>
+  <exec_depend>self_driving</exec_depend>
 
+  <!-- launch 関連 -->
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
 
   <exec_depend>rosidl_default_runtime</exec_depend>
 
