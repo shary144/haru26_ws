@@ -38,6 +38,7 @@ private:
                     msg.index, msg.x, msg.y, msg.yaw);
     }
     rclcpp::TimerBase::SharedPtr timer_;   // ← これが必要！
+    rclcpp::Publisher<self_driving::msg::Target>::SharedPtr pub_pose_;
 };
 int main(int argc, char **argv)
 {

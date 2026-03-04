@@ -35,7 +35,6 @@ add_executable(icp_tf_broadcaster src/icp_tf_broadcaster.cpp)
 add_executable(my_pure_pursuit_node src/my_pure_pursuit.cpp)
 add_executable(test_node src/test.cpp)
 
-
 # --- Link dependencies ---
 ament_target_dependencies(pure_pursuit_node
   rclcpp geometry_msgs nav_msgs tf2 tf2_ros tf2_geometry_msgs
