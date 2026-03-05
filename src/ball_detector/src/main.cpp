@@ -1,7 +1,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include "ball_detector/msg/ball.hpp"
-#include <self_driving/msg/ball.hpp>
+#include "self_driving/msg/ball.hpp"
+#include "self_driving/msg/ball_array.hpp"
 
 #include <opencv2/opencv.hpp>
 #include <iostream>
@@ -37,9 +38,8 @@ int main(int argc, char** argv) {
     auto logger_ = rclcpp::get_logger("ball_detector");
     RCLCPP_INFO(logger_, "Ball detector node started.");
     auto pub = node->create_publisher<ball_detector::msg::Ball>("/ball_position", 10);
-    auto pub_ball = node->create_publisher<self_driving::msg::Ball>("/ball_location", 10);
+    auto pub_ball_array = node->create_publisher<self_driving::msg::BallArray>("/ball_array", 10); // 三須のやつ
     RCLCPP_INFO(logger_, "Publisher created.");
-
 
     bool debug_mode = node->declare_parameter<bool>("debug", false);
     // for (int i = 1; i < argc; i++) {
@@ -267,6 +267,8 @@ int main(int argc, char** argv) {
             {mask_y, "yellow", contours_y}
         };
 
+        self_driving::msg::BallArray ball_array;
+
         for (const auto& m : masks) {//各色のマスクごとに処理
             for (const auto& contour : std::get<2>(m)) {//各輪郭ごとに処理
                 double area = cv::contourArea(contour);
@@ -328,22 +330,28 @@ int main(int argc, char** argv) {
 
 // ちょっと変更します。
 
-                // publish(三須)
-                self_driving::msg::Ball msg2;
+                // ball_arrayの要素を作って、push_back
+                self_driving::msg::Ball ball_msg;
                 if (color == "red") {
-                    msg2.color_id = 0;
+                    ball_msg.color_id = 0;
                 }
                 else if (color == "yellow") {
-                    msg2.color_id = 1;
+                    ball_msg.color_id = 1;
                 }
                 else if (color == "blue") {
-                    msg2.color_id = 2;
+                    ball_msg.color_id = 2;
                 }
-                msg2.robot_x = X_robot;
-                msg2.robot_y = Y_robot;
-                pub_ball->publish(msg2);
+                ball_msg.robot_x = X_robot;
+                ball_msg.robot_y = Y_robot;
+                
+                ball_array.ballarray.push_back(ball_msg);
             }
         }
+
+        ball_array.header.stamp = node->now();
+        ball_array.header.frame_id = "map";
+
+        pub_ball_array->publish(ball_array);
 
         // --- 描画用に画像共有 ---
         {
