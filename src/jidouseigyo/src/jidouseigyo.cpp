@@ -1,4 +1,3 @@
-//オムニ4輪用
 #include <rclcpp/rclcpp.hpp>
 #include "ball_detector/msg/ball.hpp"
 #include "robomas_interfaces/msg/motor_command.hpp"
@@ -16,6 +15,7 @@ public:
         pub_motor_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>("/robomas/cmd", 10);
         timer_ = this->create_wall_timer(std::chrono::milliseconds(10), std::bind(&JidouNotes::timer_callback, this));
         can_pub_  = this->create_publisher<robomas_interfaces::msg::CanFrame>("/robomas/can_tx", 10);
+        sub_robot_ = this->create_subscription<robomas_interfaces/msg/RobomasFrame>("/robomas/feedback", 10, std::bind(&JidouNotes::robomas_callback, this, std::placeholders::_1));
     }
 
 private:
@@ -156,10 +156,11 @@ private:
         }     
 
         if (step == 5) { // 足回りを後ろにずらす
+            step *= -1;
             asimawari(0, -1, 2, 360); // 位置制御、後ろに下がる
-            std::this_thread::sleep_for(std::chrono::seconds(3)); // とりあえず3秒待ってみる
-
-            step++;            
+            while() // 目標値に近づくまでwhile
+            step *= -1;
+            step++;
         }
 
         if (step == 6) {
