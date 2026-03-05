@@ -1,6 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include "ball_detector/msg/ball.hpp"
+#include <self_driving/msg/ball.hpp>
 
 #include <opencv2/opencv.hpp>
 #include <iostream>
@@ -36,6 +37,7 @@ int main(int argc, char** argv) {
     auto logger_ = rclcpp::get_logger("ball_detector");
     RCLCPP_INFO(logger_, "Ball detector node started.");
     auto pub = node->create_publisher<ball_detector::msg::Ball>("/ball_position", 10);
+    auto pub_ball = node->create_publisher<self_driving::msg::Ball>("/ball_location", 10);
     RCLCPP_INFO(logger_, "Publisher created.");
 
 
@@ -85,7 +87,7 @@ int main(int argc, char** argv) {
 
     // === カメラ ===
 
-    cv::VideoCapture cap("http://172.29.128.1:8080/video");
+    cv::VideoCapture cap("/dev/video0", cv::CAP_V4L2);;
     if (!cap.isOpened()) {
         RCLCPP_ERROR(logger_, "Failed to open camera stream!");
         return 0;
@@ -313,6 +315,7 @@ int main(int argc, char** argv) {
                     cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
                 }
 
+
                 // publish
                 ball_detector::msg::Ball msg;
                 msg.header.stamp = node->now();
@@ -322,6 +325,23 @@ int main(int argc, char** argv) {
                 msg.position.z = Z_robot;
                 msg.color = color;
                 pub->publish(msg);
+
+// ちょっと変更します。
+
+                // publish(三須)
+                self_driving::msg::Ball msg2;
+                if (color == "red") {
+                    msg2.color_id = 0;
+                }
+                else if (color == "yellow") {
+                    msg2.color_id = 1;
+                }
+                else if (color == "blue") {
+                    msg2.color_id = 2;
+                }
+                msg2.robot_x = X_robot;
+                msg2.robot_y = Y_robot;
+                pub_ball->publish(msg2);
             }
         }
 

@@ -24,9 +24,12 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 # --- OpenCV ---
 find_package(OpenCV REQUIRED)
 
+# --- カスタムメッセージのインポート
+find_package(self_driving REQUIRED)
+
 # --- 実行ファイル ---
 add_executable(ball_detector_node src/main.cpp)
-ament_target_dependencies(ball_detector_node rclcpp geometry_msgs)
+ament_target_dependencies(ball_detector_node rclcpp geometry_msgs self_driving)
 target_link_libraries(ball_detector_node ${OpenCV_LIBS})
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(ball_detector_node ${cpp_typesupport_target} ${OpenCV_LIBS})
@@ -44,6 +47,7 @@ add_executable(ball_color_marker_node src/ball_color_marker_node.cpp)
 ament_target_dependencies(ball_color_marker_node
     rclcpp
     visualization_msgs
+    self_driving
 )
 
 install(TARGETS ball_color_marker_node
