@@ -9,6 +9,30 @@
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
 #include <cmath>
+template <typename MsgT>
+class LatestValueSubscriber {
+public:
+    LatestValueSubscriber(rclcpp::Node* node, const std::string& topic)
+    {
+        sub_ = node->create_subscription<MsgT>(
+            topic, 10,
+            [this](const typename MsgT::SharedPtr msg) {
+                latest_ = *msg;
+                has_value_ = true;
+            }
+        );
+    }
+
+    bool has_value() const { return has_value_; }
+
+    MsgT get() const { return latest_; }
+
+private:
+    typename MsgT::SharedPtr sub_;
+    MsgT latest_;
+    bool has_value_ = false;
+};
+
 
 class ManagerNode : public rclcpp::Node
 {
@@ -19,12 +43,11 @@ public:
         route_index_ = 0;
         sub_status_ = create_subscription<self_driving::msg::TargetStatus>(
             "pursuit/status", 10,
-            std::bind(&ManagerNode::callback, this, std::placeholders::_1)
+            std::bind(&ManagerNode::update_status, this, std::placeholders::_1)
         );
         pub_pose_ = this->create_publisher<self_driving::msg::Target>(
             "target_pose", 10
         );
-
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(500),
             std::bind(&ManagerNode::publish_once, this)
@@ -32,6 +55,11 @@ public:
     }
 
 private:
+    rclcpp::Subscription<self_driving::msg::TargetStatus>::SharedPtr sub_status_;
+    rclcpp::Publisher<self_driving::msg::Target>::SharedPtr pub_pose_;
+    void run_promise_chain() //主制御のコールバック
+    void update_status();
+
     //ルート定義系
     double wallDistance = 0.35;
     std::map<std::string, std::vector<double>> nav_point_ = {
@@ -41,17 +69,31 @@ private:
         {"notezone_", {0.35, 5.888}}
     };
     std::vector<std::array<double, 3>> main_route;
+
     //制御順番を管理するための変数
-    std::vector<std::function<void()>> callback_chain;
-    int waypoint_id_; //単純にpublishした分連番でidを振る(クラス変数)
+    std::vector<std::function<bool()>> promise_chain; //制御全体
+    size_t promise_index_; //promise_chainのどこまで実行したか
+    size_t waypoint_index_; //単純にpursuitした分連番でidを振る(クラス変数)
     self_driving::msg::TargetStatus status_msg;
+    bool follow_waypoint(std::string kind, bool back=false);
+    bool follow_route();/*waypoint列をそのまま引数にもてる*/
+    bool catch_front_target()
     
+    //unfold:promise_chainで回ってきたときに自分のインデックスの次にpursuit列とフッターをpromise_chainに挿入する処理
+    //これでpursuitを疑似非同期的に実行できる
+
+    void run_promise_chain() {
+        auto [func, arg] = promise_chain[promise_index];
+        if (func(arg)) promise_index++;
+    }
+
     //色ピックのステータス
-    std::map<std::string, bool> colors_isleft = {
-        {"blue", true},
-        {"yellow", true},
-        {"red", true}
+    std::map<std::string, bool> colors_iscompleted = {
+        {"blue", false},
+        {"yellow", false},
+        {"red", false}
     };
+    
     std::vector<std::vector<double>> route_seg(std::string kind, bool back=false) {
         //ルート生成関数。kindは画像認識ノードからの情報をもとに、どのルートを通るかを決めるための引数。
         if (kind=="init") 
@@ -73,34 +115,36 @@ private:
             };
         }
     }
-    bool pursuit() {
+    //リアルタイムでカメラ補正:targetがずれることになるので参照渡し
+    bool pursuit(std::array<double, 3> waypoint) {
         //追従の完了を待って、次の目標値をpublishする関数
         //pursuit_nodeから到達を検知したら終了→trueを返す
-        callback_msg
-        if  return true;
-    }
-
-    void publish_once() {
-        //目標値をpublishして挙動を確認(テスト用)
-        self_driving::msg::Target msg;
-        msg.index=0;
-        msg.x=1.0;
-        msg.y=2.0;
-        msg.yaw=0.5;
-        pub_pose_->publish(msg);
-        RCLCPP_INFO(get_logger(), "Published target pose: index=%d, x=%.2f, y=%.2f, yaw=%.2f", 
-                    msg.index, msg.x, msg.y, msg.yaw);
-    }
-    //
-    void update_route_status(self_driving::msg::TargetStatus)
-    bool follow_waypoint(std::string kind) {
-        //ルートの達成を状態として持たせる
-        auto route_segment = this->route_seg(kind);
-        //pursuit/statusをみて、追従が終わったら次の目標値をpublishする、という流れを作る
-        for (const auto& point : route_segment) {
-            this->publish_target(point[0], point[1], point[2]);
+        this->publish_target(waypoint[0],waypoint[1], waypoint[2]);
+        //ここでpursuit_nodeからの到達を検知する必要がある
+        if (sub_status_) {
+            this->waypoint_index_++;
+            this->promise_index_++;
+            return true;
+        } else {
+            return false;
         }
     }
+
+    bool unfold_route(const std::string &kind, bool isback) {
+        promise_chain.insert(promise_chain.begin()+this->promise_index_, [] {
+            RCLCPP_INFO(get_logger(), "Route '%s/%s' start", kind.c_str(),isback?"back":"foreward"); return true;});
+        auto route = route_seg(kind);
+        for(int i=1;i<route.size+1;i++){
+            promise_chain.insert(
+                promise_chain.begin()+this->promise_index_+i,
+                std::bind(pursuit,route[i])
+            );
+        }
+        promise_chain.insert(route.size+2, [] {
+            RCLCPP_INFO(get_logger(), "Route '%s/%s' end", kind.c_str(),isback?"back":"foreward"); return true;})
+        return true;
+    }
+ 
 
     void publish_target(double x, double y, double yaw)
     {
@@ -115,7 +159,7 @@ private:
     // ==========================
     // pursuit/status コールバック
     // ==========================
-    void callback(const self_driving::msg::TargetStatus::SharedPtr msg){
+    void update_status(const self_driving::msg::TargetStatus::SharedPtr msg){
         status_msg = *msg;
     }
 
@@ -124,7 +168,6 @@ private:
     // ==========================
     void set_route(const std::string &kind)
     {
-
         route_ = routes_[kind];
         route_index_ = 0;
         RCLCPP_INFO(get_logger(), "Route set: %s", kind.c_str());
@@ -143,10 +186,6 @@ private:
         }
     }
 
-
-    /*rclcpp::Subscription<self_driving::msg::TargetStatus>::SharedPtr sub_status_;*/
-    rclcpp::Publisher<self_driving::msg::Target>::SharedPtr pub_pose_;
-    rclcpp::TimerBase::SharedPtr timer_;   // ← これが必要！
 };
 int main(int argc, char **argv)
 {

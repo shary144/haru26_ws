@@ -92,7 +92,7 @@ private:
     //or 目標に到達してから新しい目標を受信していない場合は何もしない
     if (!has_target_) return;
 
-    double tx = this->latest_target_.x;   // 目標値
+    double tx = this->latest_target_.x; // 目標値
     double ty = this->latest_target_.y;
     double tyaw = this->latest_target_.yaw;
     //ここに画像認識から推定した自己位置とlidarから推定した自己位置を

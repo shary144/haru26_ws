@@ -7,8 +7,10 @@ import os
 def generate_launch_description():
 
     keywords = [
+        ("robomas_controller", "robomas_bringup.launch.py"),
+        #("urg_node","urg_node_bringup.launch.py"),
+        ("odometry_plugins", "odometry_bridge_launch.xml"),
         ("lidar_imu", "lidar_imu_bringup.launch.py"),
-        ("odometry_plugins", "odometry_bridge_launch.xml")
     ]
 
     launch_path_series = []
