@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
 
     // === メインループ ===
     cv::Mat frame, und, hsv;
-    constexpr double ball_radius_m = 0.095; // ボールの実際の半径[m] 後で変えてね
+    constexpr double ball_radius_m = 0.075; // ボールの実際の半径[m] 後で変えてね
 
     while (rclcpp::ok()) {
         cap >> frame;
