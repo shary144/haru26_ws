@@ -1,6 +1,30 @@
+## まず初めに
+ 新規ターミナルでは`source install/bash`を一度実行することでros2内の環境変数ないしはros2コマンドを有効化できます
+
+ 権限を与えるために`sudo chmod 777 dev/ttyACM0`を実行しておいてください
+
+ 
+# launchファイルの解説
+```ros2 launch self_driving PrepareAll.launch.py```はこのパッケージを利用するための依存関係にある他パッケージのlaunchファイルをすべて起動します。
+
+`ros2 launch self_driving My.launch.py`はこのパッケージの実行可能ノードをすべて起動します
+
+# ノード説明
+
 manager_node: 全体のルート/操作設計(射出/把持)
+
 image_node(仮): 画像からボールと色とカメラ基準の座標を導く
-my_pure_pursuit_node: target_poseを受けてモーターを動かす
+
+my_pure_pursuit_node: target_poseを受けてモーターを動かす(icpを座標系変換に使うがそれ以外は単純に機体のモーター制御の中間層)
+
+```mermaid
+graph TD;
+    A([manager_node])-->|/target_pose|B[my_pure_pursuit_node];
+    B-->|target_status|A
+    C[lidar_imu]-->|/robot_pose_icp|A;
+    C-->|/robot_pose_icp|B
+    D[camera_node]-->|/ball_array:BallArray|A
+```
 
 まずmanager_nodeについて
 今回やるべきことは以下の繰り返しになります。
@@ -13,11 +37,11 @@ my_pure_pursuit_node: target_poseを受けてモーターを動かす
 ただしこの試合中while文をずっと回すわけにはいかないし、ros2で動くのは所詮callbackなのでクラス変数をフル活用します。
 クラス変数にこの制御ループのそれぞれの操作(例."5.射出")をvector型で持たせて、それぞれトピックの値などの条件を満たしたときにindexを進めて、その次からは進んだindexに格納された処理次からのmain_callbackで繰り返される仕組みです。
 この利点としてはvectorの操作で制御の順番がいじれたり、制御を付け足したりできる点です。
-ちなみにc++の仕様上vectorの型はクラスのポインタなはず
-いまはまだ構想なままですが明日実装してみます
 
-指令
-[topic]target_pose:ワールド座標上の目標点と目標姿勢の仕組み
+## topicやmessageについて
+
+##[topic]target_poseワールド座標上の目標点と目標姿勢の仕組み
+
 [msg]Target:(x,y,yaw)
 (x1,y1,yaw)→(x2,y2,yaw):機体はある向き(yaw)を向きながら平行移動
 (x,y,yaw1)→(x,y,yaw2):機体はyaw1からyaw2へ(近いほうの向きに)回転

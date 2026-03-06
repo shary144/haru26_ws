@@ -21,9 +21,7 @@ class NavNode : public rclcpp::Node
 public:
   NavNode()
   : Node("my_pure_pursuit_node", 
-    rclcpp::NodeOptions().allow_undeclared_parameters(true)
-    
-  )
+    rclcpp::NodeOptions().allow_undeclared_parameters(true))
   {
 
     // ICP 推定結果の購読
@@ -66,6 +64,7 @@ private:
   std::deque<std::array<double, 3>> history_; // 履歴用
   self_driving::msg::Target latest_target_;   // 最新の目標値
   bool has_target_ = false;                   // 目標が来たかどうか
+  
 
   // ==========================
   // ICP callback
@@ -228,6 +227,8 @@ private:
     return {sx / n, sy / n, syaw / n};
   }
 };
+
+
 
 int main(int argc, char **argv)
 {

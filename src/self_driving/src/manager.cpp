@@ -33,32 +33,33 @@ private:
     bool has_value_ = false;
 };
 
-
 class ManagerNode : public rclcpp::Node
 {
 public:
     ManagerNode()
     : Node("manager_node")
     {
+        //内部的に更新がかかる構造体としてメッセージを購読
+        LatestValueSubscriber<self_driving::msg::TargetStatus> status_msg(this,"pursuit/status");
+        LatestValueSubscriber<self_driving::msg::BallArray> ball_msg(this,"ball_array")
         route_index_ = 0;
-        sub_status_ = create_subscription<self_driving::msg::TargetStatus>(
-            "pursuit/status", 10,
-            std::bind(&ManagerNode::update_status, this, std::placeholders::_1)
-        );
+        // ICP 推定結果の購読
+        sub_pose_ = create_subscription<std_msgs::msg::Float32MultiArray>(
+            "robot_pose_icp", 10,
+            std::bind(&NavNode::run_promise_chain, this, std::placeholders::_1));
+        
         pub_pose_ = this->create_publisher<self_driving::msg::Target>(
             "target_pose", 10
-        );
-        timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(500),
-            std::bind(&ManagerNode::publish_once, this)
         );
     }
 
 private:
+    LatestValueSubscriber<self_driving::msg::TargetStatus> status_msg;
+    LatestValueSubscriber<self_driving::msg::BallArray> ball_msg;
     rclcpp::Subscription<self_driving::msg::TargetStatus>::SharedPtr sub_status_;
     rclcpp::Publisher<self_driving::msg::Target>::SharedPtr pub_pose_;
     void run_promise_chain() //主制御のコールバック
-    void update_status();
+    void unfold_pick()
 
     //ルート定義系
     double wallDistance = 0.35;
@@ -69,22 +70,25 @@ private:
         {"notezone_", {0.35, 5.888}}
     };
     std::vector<std::array<double, 3>> main_route;
-
+    
     //制御順番を管理するための変数
-    std::vector<std::function<bool()>> promise_chain; //制御全体
+    std::vector<std::function<bool()>> promise_chain = {
+        std::bind(&Manager::unfold_route,"init",false),
+        std::bind(&Manager::pursuit,)
+    };
+
     size_t promise_index_; //promise_chainのどこまで実行したか
     size_t waypoint_index_; //単純にpursuitした分連番でidを振る(クラス変数)
-    self_driving::msg::TargetStatus status_msg;
     bool follow_waypoint(std::string kind, bool back=false);
-    bool follow_route();/*waypoint列をそのまま引数にもてる*/
-    bool catch_front_target()
+    bool pursuit();/*waypoint列をそのまま引数にもてる*/
     
     //unfold:promise_chainで回ってきたときに自分のインデックスの次にpursuit列とフッターをpromise_chainに挿入する処理
     //これでpursuitを疑似非同期的に実行できる
 
-    void run_promise_chain() {
-        auto [func, arg] = promise_chain[promise_index];
-        if (func(arg)) promise_index++;
+    void run_promise_chain(std_msgs::msg::Float32MultiArray msg) {
+        this->icp_msg = *msg;
+        auto func = this->promise_chain[this->promise_index];
+        if (func()) this->promise_index++;
     }
 
     //色ピックのステータス
@@ -93,6 +97,13 @@ private:
         {"yellow", false},
         {"red", false}
     };
+    
+    ave_ball_array
+    std::vector<self_driving::msg::Ball> balls = ball_msg.get()->data.BallArray;
+    for(auto& ball : balls->ball_array){
+        ball.robot_x += 
+        ball.robot_y += 
+    }
     
     std::vector<std::vector<double>> route_seg(std::string kind, bool back=false) {
         //ルート生成関数。kindは画像認識ノードからの情報をもとに、どのルートを通るかを決めるための引数。
@@ -115,13 +126,14 @@ private:
             };
         }
     }
+
     //リアルタイムでカメラ補正:targetがずれることになるので参照渡し
     bool pursuit(std::array<double, 3> waypoint) {
         //追従の完了を待って、次の目標値をpublishする関数
         //pursuit_nodeから到達を検知したら終了→trueを返す
         this->publish_target(waypoint[0],waypoint[1], waypoint[2]);
         //ここでpursuit_nodeからの到達を検知する必要がある
-        if (sub_status_) {
+        if (status_msg->status) {
             this->waypoint_index_++;
             this->promise_index_++;
             return true;
