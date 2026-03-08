@@ -8,6 +8,7 @@
 #include <vector>
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
+#include "my_tf.hpp"
 #include <cmath>
 template <typename MsgT>
 class LatestValueSubscriber {
@@ -33,6 +34,35 @@ private:
     bool has_value_ = false;
 };
 
+struct BallChache{
+    int color_id
+    double global_x;
+    double global_y;
+    bool state;
+};
+
+struct BallLayout{
+    BallLayout(void):{};
+    double threshold_r = 0.3
+    std::vector<ballChache> ball_layout_;
+    void insert(std::vector<self_driving::msg::Ball> ball_array){
+        for (BallChache& ball_chache: ball_layout_){
+            for (self_driving::msg::Ball& ball: ball_layout_){
+                double d=std::sqrt(std::pow(ball_chache.global_x-ball.robot_x, 2)
+                 + std::pow(ball_chache.global_y-ball.robot_y, 2))
+                if d<thereshol
+            }
+        }
+    }
+}
+
+
+//Mytf tf(x=0,y=0,yaw=0)
+//tf.sub_rot(lidar_yaw).sub_trans(lidar_x,lidar_y)
+//Mytf tf2();
+//tf3 = tf2.set_value(icp_x,icp_y,icp_yaw).apply(tf).add_trans(ball_x,ball_y)
+//tf3.x,tf3.yとして値を引き出す
+
 class ManagerNode : public rclcpp::Node
 {
 public:
@@ -42,6 +72,7 @@ public:
         //内部的に更新がかかる構造体としてメッセージを購読
         LatestValueSubscriber<self_driving::msg::TargetStatus> status_msg(this,"pursuit/status");
         LatestValueSubscriber<self_driving::msg::BallArray> ball_msg(this,"ball_array")
+
         route_index_ = 0;
         // ICP 推定結果の購読
         sub_pose_ = create_subscription<std_msgs::msg::Float32MultiArray>(
@@ -58,8 +89,33 @@ private:
     LatestValueSubscriber<self_driving::msg::BallArray> ball_msg;
     rclcpp::Subscription<self_driving::msg::TargetStatus>::SharedPtr sub_status_;
     rclcpp::Publisher<self_driving::msg::Target>::SharedPtr pub_pose_;
+    
+    //座標変換用の定数
+    double lidar_offset_x = 0.286;
+    double lidar_offset_y = -0.165;
+    double lidar_offset_yaw = -1.047;
+    double nav_radius = 0.3;
+    std::vector<Ball_chache> ball_chache://{{color,x,y,onstage}}
+
     void run_promise_chain() //主制御のコールバック
     void unfold_pick()
+
+    bool pick_ball(int id){
+        //座標変換系(lidarグローバル座標→ロボットグローバル座標)
+        Mytf recipe_lidar_offset();
+        recipe_lidar_offset
+            .sub_rot(lidar_offset_yaw)
+            .sub_trans(lidar_offset_x, lidar_offset_y);
+        //ボールグローバル座標の計算
+        Mytf tf2();
+        ball_msg.get()
+        tf2.set_value(icp_x,icp_y,icp_yaw);
+            .apply(recipe_lidar_offset)
+            .add_trans(ball_msg.get().data.,ball_msg.get().data);
+        publish_target(tf2.x(),tf2.y(),tf2.yaw());
+        
+    }
+
 
     //ルート定義系
     double wallDistance = 0.35;
@@ -74,7 +130,10 @@ private:
     //制御順番を管理するための変数
     std::vector<std::function<bool()>> promise_chain = {
         std::bind(&Manager::unfold_route,"init",false),
-        std::bind(&Manager::pursuit,)
+        &Manager::ball_pick,
+        std::bind(&Manager::unfold_route,kinds[0],true),
+        &Manager::shoot,
+        std::bind(&Manager::unfold_route,kinds[0],false),
     };
 
     size_t promise_index_; //promise_chainのどこまで実行したか
@@ -92,19 +151,26 @@ private:
     }
 
     //色ピックのステータス
-    std::map<std::string, bool> colors_iscompleted = {
-        {"blue", false},
-        {"yellow", false},
-        {"red", false}
+    std::map<std::string, int> colors_shot = {
+        {"blue", 0},
+        {"yellow", 0},
+        {"red", 0}
     };
     
-    ave_ball_array
     std::vector<self_driving::msg::Ball> balls = ball_msg.get()->data.BallArray;
-    for(auto& ball : balls->ball_array){
-        ball.robot_x += 
-        ball.robot_y += 
+    //1.一番左のボールをピック。
+    //2.同じ色のボールを探してピック。(インデックスを保存)
+    std::array<std::vector<int>,3> closest_ind;
+    for(int i=0;i<ball_array.size();i++){
+        auto closest_ball = balls[closest_ind[balls[i].color_id][i]];
+        auto ith_ball = balls[i];
+        double d_min = closest_ball.robot_x*closest_ball.robot_x+closest_ball.robot_y*closest_ball.robot_y;
+        double d = ith_ball.robot_x*ith_ball.robot_x+ith_ball.robot_y*ith_ball.robot_y;
     }
     
+    balls[closest_ind[kind]].x
+    
+
     std::vector<std::vector<double>> route_seg(std::string kind, bool back=false) {
         //ルート生成関数。kindは画像認識ノードからの情報をもとに、どのルートを通るかを決めるための引数。
         if (kind=="init") 
@@ -155,6 +221,9 @@ private:
         promise_chain.insert(route.size+2, [] {
             RCLCPP_INFO(get_logger(), "Route '%s/%s' end", kind.c_str(),isback?"back":"foreward"); return true;})
         return true;
+    }
+    bool ball_pick(){
+        
     }
  
 
