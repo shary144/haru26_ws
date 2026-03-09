@@ -4,6 +4,7 @@
 #include "robomas_interfaces/msg/motor_command.hpp"
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
+#include "my_tf2.hpp"
 
 #include <vector>
 #include <array>
@@ -64,7 +65,6 @@ private:
   std::deque<std::array<double, 3>> history_; // 履歴用
   self_driving::msg::Target latest_target_;   // 最新の目標値
   bool has_target_ = false;                   // 目標が来たかどうか
-  
 
   // ==========================
   // ICP callback
@@ -82,7 +82,8 @@ private:
     // auto [fx, fy, fyaw] = filtered_pose();
     // -------------------------------------
 
-    // LiDARの位置と向きを考慮してロボットの位置と向きを逆算
+    // LiDARの位置と向きを考慮してロボットの位置と向きを求める
+    Frame
     double robot_x = x + this->lidar_offset_x * std::cos(yaw) - this->lidar_offset_y * std::sin(yaw);
     double robot_y = y + this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
     double robot_yaw = yaw - this->lidar_offset_yaw;

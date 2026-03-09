@@ -89,7 +89,6 @@ public:
         return *this;
     }
 
-
     float x() const { return _x; }
     float y() const { return _y; }
     float yaw() const { return _yaw; }

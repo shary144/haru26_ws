@@ -8,6 +8,7 @@
 #include <vector>
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
+#include "robomas_interfaces/msg/"
 #include "my_tf.hpp"
 #include <cmath>
 template <typename MsgT>
@@ -95,7 +96,7 @@ private:
     double lidar_offset_y = -0.165;
     double lidar_offset_yaw = -1.047;
     double nav_radius = 0.3;
-    std::vector<Ball_chache> ball_chache://{{color,x,y,onstage}}
+    std::vector<Ball_chache> ball_chache: //{{color,x,y,onstage}}
 
     void run_promise_chain() //主制御のコールバック
     void unfold_pick()
@@ -112,8 +113,7 @@ private:
         tf2.set_value(icp_x,icp_y,icp_yaw);
             .apply(recipe_lidar_offset)
             .add_trans(ball_msg.get().data.,ball_msg.get().data);
-        publish_target(tf2.x(),tf2.y(),tf2.yaw());
-        
+        publish_target(tf2.x(),tf2.y(),tf2.yaw());   
     }
 
 
@@ -222,8 +222,18 @@ private:
             RCLCPP_INFO(get_logger(), "Route '%s/%s' end", kind.c_str(),isback?"back":"foreward"); return true;})
         return true;
     }
-    bool ball_pick(){
-        
+    bool unfold_shoot(){
+        auto motor_msg = robomas_interfaces::msg::RobomasPacket();
+        auto motor_feedback = robomas_interfaces::msg::RobomasFrame();
+        robomas_interfaces::msg::MotorCommand cmd;
+        cmd.motor_id = 4;
+        cmd.mode = 2;
+        //位置制御(mode2)
+        //robomas_interfaces/msg/RobomasFrame.msgのangle属性で基盤起動から現在までの累積角度を取り出せて、
+        //targetは目標累積角度を指定
+        //8*19*360°で一周のはずなので
+        if <=motor_feedback->angle[3]<=
+        cmd->target-
     }
  
 
