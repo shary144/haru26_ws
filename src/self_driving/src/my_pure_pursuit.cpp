@@ -22,7 +22,8 @@ class NavNode : public rclcpp::Node
 public:
   NavNode()
   : Node("my_pure_pursuit_node", 
-    rclcpp::NodeOptions().allow_undeclared_parameters(true))
+    rclcpp::NodeOptions().allow_undeclared_parameters(true)),
+    frame_link("frame_link"),lidar("lidar_frame"),map("map")
   {
 
     // ICP 推定結果の購読
@@ -42,7 +43,12 @@ public:
     // 到達ステータスをpublish
     pub_status_ = this->create_publisher<self_driving::msg::TargetStatus>(
       "/pursuit/status", 10);
+    
 
+    this->lidar.set_base(this->frame_link(
+      this->lidar_offset_x,
+      this->lidar_offset_y,
+      this->lidar_offset_yaw));
     RCLCPP_INFO(get_logger(), "my_pure_pursuit_node started");
   }
 
@@ -61,7 +67,9 @@ private:
   rclcpp::Subscription<self_driving::msg::Target>::SharedPtr sub_target_;
   rclcpp::Publisher<robomas_interfaces::msg::RobomasPacket>::SharedPtr pub_cmd_;
   rclcpp::Publisher<self_driving::msg::TargetStatus>::SharedPtr pub_status_;
-
+  Frame frame_link;
+  Frame lidar;
+  Frame map;
   std::deque<std::array<double, 3>> history_; // 履歴用
   self_driving::msg::Target latest_target_;   // 最新の目標値
   bool has_target_ = false;                   // 目標が来たかどうか
@@ -69,28 +77,18 @@ private:
   // ==========================
   // ICP callback
   // ==========================
-  void pose_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
+  void pose_callback(const std_msgs::msg::Float32MultiArray::SharedPtr icp_msg)
   {
-    if (msg->data.size() < 3) return;
-
-    double x = msg->data[0];
-    double y = msg->data[1];
-    double yaw = msg->data[2];
-
-    // ---- 平均化したい場合はここを ON ----
-    // add_history(x, y, yaw);
-    // auto [fx, fy, fyaw] = filtered_pose();
-    // -------------------------------------
-
-    // LiDARの位置と向きを考慮してロボットの位置と向きを求める
-    Frame
-    double robot_x = x + this->lidar_offset_x * std::cos(yaw) - this->lidar_offset_y * std::sin(yaw);
-    double robot_y = y + this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
-    double robot_yaw = yaw - this->lidar_offset_yaw;
-
-    // まだ一度も目標を受信していない
+    if (icp_msg->data.size() < 3) return;
+    //　まだ一度も目標を受信していない
     //or 目標に到達してから新しい目標を受信していない場合は何もしない
     if (!has_target_) return;
+
+    double [x,y,yaw] = icp_msg->data;
+
+    // LiDARの位置と向きを考慮してロボットの位置と向きを求める
+    this->lidar.base = this->map(x,y,yaw);
+    auto [robot_x,robot_y,robot_yaw] = this->frame_link(this->map(x,y,yaw));
 
     double tx = this->latest_target_.x; // 目標値
     double ty = this->latest_target_.y;
@@ -113,19 +111,13 @@ private:
   void navigate(double x, double y, double yaw,
                 double target_x, double target_y, double target_yaw)
   {
-    // 世界座標での誤差
-    double ex = target_x - x;
-    double ey = target_y - y;
-    double e_yaw = normalize_angle(target_yaw - yaw);
-
-    // ロボット座標系へ変換
-    double ex_b = std::cos(yaw) * ex + std::sin(yaw) * ey;
-    double ey_b = -std::sin(yaw) * ex + std::cos(yaw) * ey;
+    // 世界座標での誤差→ロボット座標での誤差
+    auto [ex,ey,eyaw] = this->frame_link(this->map(target_x-x,target_y-y,normalize_angle(target_yaw - yaw)))
 
     // 制御入力（P制御）
-    double vx = this->pgain_x * ex_b;
-    double vy = this->pgain_y * ey_b;
-    double wz = this->pgain_theta * e_yaw;
+    double vx = this->pgain_x * ex;
+    double vy = this->pgain_y * ey;
+    double wz = this->pgain_theta * eyaw;
     /*
     // 安定化のための制限
     vx = std::clamp(vx, -0.3, 0.3);

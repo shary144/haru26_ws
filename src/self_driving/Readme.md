@@ -1,5 +1,5 @@
 ## まず初めに
- 新規ターミナルでは`source install/bash`を一度実行することでros2内の環境変数ないしはros2コマンドを有効化できます
+ 新規ターミナルでは`source install/setup.bash`を一度実行することでros2内の環境変数ないしはros2コマンドを有効化できます
 
 ポート権限を与えるために`sudo chmod 777 /dev/ttyACM0` `sudo chmod 777 /dev/ttyACM1`を実行しておいてください
 
@@ -52,4 +52,26 @@ topic/message|意味
 [msg]BallArray: (Ball[])
 
 ボールキャッシュの保存：
-キャリブレーションを吸収しながらボールの平均を記録します
+キャリブレーションを吸収するためボールの平均を記録します
+具体的にはjティック目のi番目のボールの座標をmap座標系で$(x_{i(j-1)},y_{i(j-1)})$としたときに次のtickで来る$(x_j,y_j)$がボールiの座標から一定距離d以下の範囲の時$x_{ij} = \frac{x_j+(j-1)x_{i(j-1)}}{j},y_{ij} = \frac{y_j+(j-1)y_{i(j-1)}}{j}$とする。
+これはBallChache.hppとして作成されました。
+
+## my_tf2について
+直観的な座標変換を目指した自作クラス。
+SO2の平面自由度でのユニタリ変換は基準となる姿勢の(+x,+y)=>(+yaw)=>の合成で表せるために、その変換を自動化してしまおうという思想
+```cpp
+#include "my_tf2.hpp"
+//宣言時
+Frame frameA("A");
+Frame frameB("B");
+```
+`frameB.set_base(frameA(x,y,th))`はframeA座標系における(x,y)の点をframeBの原点とし、thの角度へx軸を伸ばすという意味。これは座標系のリンクとしてframeAとframeBの両方に保存され、何回も呼び出されたときは最新のリンクのみが有効になる。また、frameAとframeBのリンク、frameBとframeCのリンクを設定している時はframeAとframeCの変換ができるようになり、ここでframeAとframeCのリンクが今までとつじつまが合わないように設定されたときはframeAとframeCのリンクのみ有効になる。
+また、リンクがつながってない座標系同士で変換しようとすると"Frame not reachable"エラーをはいてそのソース全体の処理を止める。(stdexceptを使ってるがノードが正常終了するかは試してないので不明)
+
+座標変換時は
+```cpp
+my_tf2::Pose pos = frameB(frameA(x,y,th));
+printf("座標系: %sでの座標(%lf,%lf,%lf)",pos.frame.name,pos.x,pos.y,pos.th);
+
+```
+これは座標系A上の座標(x,y,th)を座標系Bで表したときの座標が返ってくるように実装している
