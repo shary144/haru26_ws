@@ -16,16 +16,23 @@ manager_node: 全体のルート/操作設計(射出/把持)
 
 camera_node(仮): 画像からボールと色とカメラ基準の座標を導く
 
-my_pure_pursuit_node: target_poseを受けてモーターを動かす(icpを座標系変換に使うがそれ以外は単純に機体のモーター制御の中間層)
+actuation_agent: target_poseを受けてモーターを動かす(icpを座標系変換に使うがそれ以外は単純に機体のモーター制御の中間層)
 
 ```mermaid
 graph TD;
-    A([manager_node])-->|/target_pose|B[my_pure_pursuit_node];
+    A([manager_node])-->|/target_pose|B[actuation_agent];
     B-->|/target_status|A;
     C[lidar_imu]-->|/robot_pose_icp|A;
     C-->|/robot_pose_icp|B;
     D[camera_node]-->|/ball_array:BallArray|A
+    B-->|/robomas/cmd|E
+    E[robomas_controller]-->|/robomas/feedback|B
 ```
+
+自作ノード名|役割
+--|--
+manager_node|大まかな操作の流れを指令
+actuation_agent|うまく指令通りに機体を動かす
 
 まずmanager_nodeについて
 今回やるべきことは以下の繰り返しになります。
@@ -38,6 +45,23 @@ graph TD;
 ただしこの試合中while文をずっと回すわけにはいかないし、ros2で動くのは所謂callbackなのでクラス変数をフル活用します。
 クラス変数にこの制御ループのそれぞれの操作(例."5.射出")をvectorの要素として持たせて、それぞれトピックの値などの条件を満たしたときにindexを進めて、その次からは進んだindexに格納された処理が次からのmain_callbackで繰り返される仕組みです。
 これにはvectorの操作で制御の順番がいじれたり、制御を付け足したりできる利点があります。
+この格納した関数らを便宜上seq(シークエンス)関数と呼ぶことにします
+
+関数|目的
+--|--
+pursuit(x,y,yaw)<br>[seq関数]|map座標(x,y,yaw)へ向かいます<br>終了条件:誤差が閾値以下
+unfold_route(name)<br>[seq関数]|座標列(`name`)をたどるようにpursuit(x,y,yaw)をpromise_chainに展開します<br>終了条件:遂行
+unfold_pick(color)<br>[seq関数]|`color`色のボールを拾います<br>終了条件:遂行
+shoot(color)<br>[seq関数]|`color`色のノードの直前まで進みshootキューを発行します<br>終了条件:`/status`=true
+callback_manager|各seq関数の終了条件(seq関数がtrueを返す)とともに`promise_chain`を遷移させます
+
+### actuation_agent
+関数|目的
+--|--
+to_mapframe([/target])|map座標系での座標に向かいます
+shoot(void)<br>- [/robomas/cmd],<br>- [/robomas/feedback]|射出機構の速度を裏で調整して撃鉄がうまく一周して戻るようにする
+
+
 
 ## topicやmessageについて
 topic/message|意味

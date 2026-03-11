@@ -13,22 +13,17 @@
 //各インスタンス内履歴の形としては
 //* 相手のframeインスタンス参照
 //* 親か否か
-//* Pose child{x,y,th,frame}
+//* x,y,th
 //これらの履歴があれば変換の必要条件は満たす
-//さらにこれを上書きできるようにしたい
-//よって上述の必要条件をLinkクラスにもたせて、上書きするようにする
-//また、3つ巴以上の相互リンクではBFSの段階でつじつまが合わないなら
-//矛盾するインスタンスは削除される。
 
 //auto& pos = frameB(frameA(x,y,th)) ...座標系A上のポーズ(x,y,th)を座標系Bで表現
 //引数で紐づけられる順番に処理self_frame(other_frame)になるときother_frameの値をもとにself_frameが処理
 //self_frameがother_frameを履歴から探して上の変換処理をする
 //親子関係をたどってたどりつけないときはエラー
 
-
+//pos.x(), pos.y(), pos.th()のように使う値を引きだす
 #include <cmath>
 #include <vector>
-#include <algorithm>
 #include <stdexcept>
 #include <string>
 
@@ -47,7 +42,8 @@ struct Pose {
 // =========================
 struct Link {
     Frame* other;     // 相手フレーム
-    Pose offset;      // 常にchild座標系基準の座標で保存してればよし
+    bool is_parent;   // 自分が親か？
+    Pose offset;      // 自分→相手 の変換
 };
 
 // =========================
@@ -80,28 +76,31 @@ struct Frame {
     // → frameA → frameB のリンク登録（双方向）
     // -------------------------
     void set_base(const Pose& pA) {
-        //先にframeAとframeB間で登録されたリンクがないか
         Frame* A = const_cast<Frame*>(pA.frame);
         Frame* B = this;
-        auto itA = std::find_if(A->links.begin(),A->links.begin(),
-            [A](const Link& link) { return link.other == B; });
-        if (itA != A->links.end()){
-            auto itB = std::find_if(B->links.begin(),B->links.begin(),
-            [B](const Link& link) { return link.other == A; });
-            itA->offset = pA;
-            itB->offset = pA;
-        }
 
         // child2parent = pA
-        Link linkAB;
-        Link linkBA;
-        linkAB.other = B;
-        linkBA.other = A;
-        linkAB.offset = linkBA.offset = pA;
+        Link child2parent;
+        child2parent.other = A;
+        child2parent.is_parent = false;
+        child2parent.offset = pA;
+
+        // parent2child = 逆変換
+        double c = std::cos(pA.th);
+        double s = std::sin(pA.th);
+
+        double rx = -c*pA.x - s*pA.y;
+        double ry =  s*pA.x - c*pA.y;
+        double rth = -pA.th;
+
+        Link parent2child;
+        parent2child.other = B;
+        parent2child.is_parent = true;
+        parent2child.offset = Pose{rx, ry, rth, B};
 
         // 双方向に登録
-        A->links.push_back(linkAB);
-        B->links.push_back(linkBA);
+        B->links.push_back(child2parent);
+        A->links.push_back(parent2child);
     }
 
     // =========================
@@ -118,14 +117,13 @@ struct Frame {
         while (!q.empty()) {
             Node cur = q.back();
             q.pop_back();
-            //現在のフレームがdstの座標系に等しければ現在の座標系を返す
+
             if (cur.f == &dst)
                 return Pose{cur.pose.x, cur.pose.y, cur.pose.th, &dst};
 
             visited.push_back(cur.f);
 
             for (const Link& lk : cur.f->links) {
-                //visitedから見つかったらスタック処理をスキップ
                 if (std::find(visited.begin(), visited.end(), lk.other) != visited.end())
                     continue;
 
@@ -136,10 +134,7 @@ struct Frame {
                 double nx = lk.offset.x + c*cur.pose.x - s*cur.pose.y;
                 double ny = lk.offset.y + s*cur.pose.x + c*cur.pose.y;
                 double nth = lk.offset.th + cur.pose.th;
-                // child側からかparent側からかで異なる
-                double nth = 
 
-                
                 q.push_back({lk.other, Pose{nx,ny,nth,lk.other}});
             }
         }

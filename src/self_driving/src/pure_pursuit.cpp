@@ -51,6 +51,7 @@ private:
 
     geometry_msgs::msg::TransformStamped tf;
     try {
+      //この時点でmapのフレームとの変換が必要
       tf = tf_buffer_.lookupTransform(path_.header.frame_id, "map",
                                       tf2::TimePointZero);
     } catch (const tf2::TransformException &ex) {
