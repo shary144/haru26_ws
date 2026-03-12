@@ -4,6 +4,7 @@
 #define OneLoopDegree 360*19*8
 
 namespace shoot {
+    this->topicM
     cmd_msg
     int angular_v;
     int angular;

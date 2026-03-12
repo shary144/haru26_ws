@@ -25,7 +25,6 @@ public:
     rclcpp::NodeOptions().allow_undeclared_parameters(true)),
     frame_link("frame_link"),lidar("lidar_frame"),map("map")
   {
-
     // ICP 推定結果の購読
     sub_pose_ = create_subscription<std_msgs::msg::Float32MultiArray>(
       "robot_pose_icp", 10,
@@ -87,7 +86,7 @@ private:
     double [x,y,yaw] = icp_msg->data;
 
     // LiDARの位置と向きを考慮してロボットの位置と向きを求める
-    this->lidar.base = this->map(x,y,yaw);
+    this->lidar.set_base(this->map(x,y,yaw));
     auto [robot_x,robot_y,robot_yaw] = this->frame_link(this->map(x,y,yaw));
 
     double tx = this->latest_target_.x; // 目標値
@@ -184,6 +183,7 @@ private:
     pub_cmd_->publish(msg);
   }
 
+////////////////////////////////////////////////////////
   void publish_stop()
   {
     publish_cmd(0.0, 0.0, 0.0);

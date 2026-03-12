@@ -143,7 +143,7 @@ printf("座標系: %sでの座標(%lf,%lf,%lf)",pos.frame.name,pos.x,pos.y,pos.t
 これは座標系A上の座標(x,y,th)を座標系Bで表したときの座標が返ってくるように実装している
 
 ### topicIOについて
-topic名とメッセージ型でtopicioを宣言すればtopicmcというmap型の辞書をクラス変数に継承するのでこれをtopic名をキーとして引き出して使える。.getで最新のtopicの値を取得、.send(msg)でトピックに送ることができる
+topic名とメッセージ型でtopicIOを宣言すればtopicMCというmap型の辞書をクラス変数に継承するのでこれをtopic名をキーとして引き出して使える。.getで最新のtopicの値を取得、.send(msg)でトピックに送ることができる
 
 ```cpp
 #include "topicIO.hpp"
@@ -170,5 +170,51 @@ this->topicMC["topic名"]->send<msg_type>(message);
 
 ### BallChacheについて
 ```cpp
+#include "BallChache.hpp"
+#include "my_tf2"
+
+for (ballchache::Ball& ball: ballchache::BallChache.ball_array/*平均化したball位置*/){
+    if (ball.on_stage&&(ball.color_id==color_id)) {
+ {
+            auto map_pos = map(base_link(ball.x,ball.y,0));
+            //みたいなね
+            pursuit(map_pos.x,map_pos.y,M_PI/2)
+        }
+    }
+}
 
 ```
+### ParamMixinについて
+任意の変数をros_parameterとして追跡・更新できるようにした。(ただしros_parameterがサポートしてる型を持つ必要がある)
+```c++
+#include "ParamMixin.hpp"
+class AnyNode : public rclcpp::Node, public ParamMixin {
+    ...
+    int64_t num=0
+    this->param("num",num);
+}
+```
+yamlを流し込むなら
+```yaml
+any_node:
+    num:0
+    ...
+```
+コマンドラインから変更するなら
+`
+ros2 param set any_node num 1
+`
+みたいに書く
+
+ROS2 のパラメータは以下の型をサポートしている：
+
+- `bool`
+- `int64_t`
+- `double`
+- `std::string`
+- `std::vector<bool>`
+- `std::vector<int64_t>`
+- `std::vector<double>`
+- `std::vector<std::string>`
+
+
