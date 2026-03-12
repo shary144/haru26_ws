@@ -9,7 +9,8 @@
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
 #include "robomas_interfaces/msg/"
-#include "my_tf.hpp"
+#include "my_tf2.hpp"
+#include "BallChache.hpp"
 #include <cmath>
 template <typename MsgT>
 class LatestValueSubscriber {
@@ -34,28 +35,6 @@ private:
     MsgT latest_;
     bool has_value_ = false;
 };
-
-struct BallChache{
-    int color_id
-    double global_x;
-    double global_y;
-    bool state;
-};
-
-struct BallLayout{
-    BallLayout(void):{};
-    double threshold_r = 0.3
-    std::vector<ballChache> ball_layout_;
-    void insert(std::vector<self_driving::msg::Ball> ball_array){
-        for (BallChache& ball_chache: ball_layout_){
-            for (self_driving::msg::Ball& ball: ball_layout_){
-                double d=std::sqrt(std::pow(ball_chache.global_x-ball.robot_x, 2)
-                 + std::pow(ball_chache.global_y-ball.robot_y, 2))
-                if d<thereshol
-            }
-        }
-    }
-}
 
 
 //Mytf tf(x=0,y=0,yaw=0)
@@ -102,18 +81,7 @@ private:
     void unfold_pick()
 
     bool pick_ball(int id){
-        //座標変換系(lidarグローバル座標→ロボットグローバル座標)
-        Mytf recipe_lidar_offset();
-        recipe_lidar_offset
-            .sub_rot(lidar_offset_yaw)
-            .sub_trans(lidar_offset_x, lidar_offset_y);
-        //ボールグローバル座標の計算
-        Mytf tf2();
-        ball_msg.get()
-        tf2.set_value(icp_x,icp_y,icp_yaw);
-            .apply(recipe_lidar_offset)
-            .add_trans(ball_msg.get().data.,ball_msg.get().data);
-        publish_target(tf2.x(),tf2.y(),tf2.yaw());   
+        //座標変換系(lidarグローバル座標→ロボットグローバル座標) 
     }
 
 

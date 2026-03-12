@@ -21,7 +21,7 @@ class NavNode : public rclcpp::Node
 {
 public:
   NavNode()
-  : Node("my_pure_pursuit_node", 
+  : Node("actuation_agent", 
     rclcpp::NodeOptions().allow_undeclared_parameters(true)),
     frame_link("frame_link"),lidar("lidar_frame"),map("map")
   {

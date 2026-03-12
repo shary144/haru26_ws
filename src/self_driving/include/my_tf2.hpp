@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <numbers>
+namespace my_tf2{
 struct Frame; // 前方宣言
 
 // =========================
@@ -174,3 +175,4 @@ struct Frame {
         throw std::runtime_error("Frame not reachable");
     }
 };
+}

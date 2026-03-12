@@ -32,7 +32,7 @@ ament_export_dependencies(rosidl_default_runtime std_msgs geometry_msgs)
 # --- Executables ---
 add_executable(pure_pursuit_node src/pure_pursuit.cpp)
 add_executable(icp_tf_broadcaster src/icp_tf_broadcaster.cpp)
-add_executable(my_pure_pursuit_node src/my_pure_pursuit.cpp)
+add_executable(actuation_agent src/actuation_agent.cpp)
 add_executable(test_node src/test.cpp)
 
 # --- Link dependencies ---
