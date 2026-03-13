@@ -18,22 +18,31 @@ public:
     }
 
 private:
-    void send_can_on() { // 電磁弁に電流を送る
-        auto msg_on = robomas_interfaces::msg::CanFrame();
-        msg_on.id = 0x100;         // 送信したいCAN ID (256にしています)
-        msg_on.dlc = 8;            // データ長
-        msg_on.data = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // 電流を送りましょう
+    void jidou() { // 自動モードであることを示す
+        auto msg_jidou = robomas_interfaces::msg::CanFrame();
+        msg_jidou.id = 0x100;         // 送信したいCAN ID
+        msg_jidou.dlc = 8;            // データ長
+        msg_jidou.data = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
         
-        can_pub_->publish(msg_on);
+        can_pub_->publish(msg_jidou);
     }
 
-    void send_can_off() { // 電磁弁に流れる電流を止める
-        auto msg_off = robomas_interfaces::msg::CanFrame();
-        msg_off.id = 0x100;         // 送信したいCAN ID (256にしています)
-        msg_off.dlc = 8;            // データ長
-        msg_off.data = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // 電流を止めましょう
+    void syudou() { // 手動モードであることを示す
+        auto msg_syudou = robomas_interfaces::msg::CanFrame();
+        msg_syudou.id = 0x100;         // 送信したいCAN ID
+        msg_syudou.dlc = 8;            // データ長
+        msg_syudou.data = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
         
-        can_pub_->publish(msg_off);
+        can_pub_->publish(msg_syudou);
+    }
+
+    void fanfare() { // ファンファーレを示す
+        auto msg_syudou = robomas_interfaces::msg::CanFrame();
+        msg_syudou.id = 0x001;         // 送信したいCAN ID
+        msg_syudou.dlc = 8;            // データ長
+        msg_syudou.data = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+        
+        can_pub_->publish(msg_syudou);
     }
 
     void joy_callback(const sensor_msgs::msg::Joy::SharedPtr joyinfo){
@@ -68,8 +77,9 @@ private:
         //motor4(射出)
         robomas_interfaces::msg::MotorCommand cmd4;
         cmd4.motor_id = 4;
-        cmd4.mode = 0;
-        cmd4.target = -10000.0f * (joyinfo->buttons[3] - joyinfo->buttons[1]); // Yボタンで上昇、Aボタンで下降
+        cmd4.mode = 1;
+        cmd4.target = -3500.0f * (/*joyinfo->buttons[3]*/ - joyinfo->buttons[1]); // Yボタンで上昇、Aボタンで何も起こらない
+        //Aボタンじゃないと壊れる右buttons[1]=1のとき→cmd.target > 0
         msg.motors.push_back(cmd4);
 
         //motor5(昇降)
@@ -79,16 +89,28 @@ private:
         cmd5.target = -1000.0f * joyinfo->axes[3]; // 右スティックで上昇、下降
         msg.motors.push_back(cmd5);
 
+        //motor6(把持)
+        robomas_interfaces::msg::MotorCommand cmd6;
+        cmd6.motor_id = 6;
+        cmd6.mode = 1;
+        cmd6.target = 1000.0f * (joyinfo->buttons[0] - joyinfo->buttons[2]);// Xボタンで、Aボタンで
+        msg.motors.push_back(cmd6);
+
         // Publish!
         pub_motor_->publish(msg);
         
-        if (joyinfo->buttons[0]) {// Xボタンが押されたら
-            send_can_on(); // 電磁弁に電流が送られる
+        if (joyinfo->buttons[3]) {// Yボタンが押されたら
+            jidou();// 自動制御
         }
-        else { // Xボタンを離したら
-            send_can_off(); // 電流が止まる
-        }
-    }
+    //     else { // Yボタンを離したら
+    //         syudou(); // 手動制御
+    //     }
+
+    //     if (joyinfo->buttons[2]){ // Bボタンが押されたら
+    //         fanfare(); // ファンファーレ達成
+    //     }
+        RCLCPP_INFO(this->get_logger(), "joy_callback");
+     }
 
     rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr sub_joy_;
     rclcpp::Publisher<robomas_interfaces::msg::RobomasPacket>::SharedPtr pub_motor_;
