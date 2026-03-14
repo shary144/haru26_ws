@@ -43,8 +43,14 @@ public:
         );
     }
 
-    template<typename T = MsgT>
-    void send(const T& msg) {
+    void send(const MsgT& msg) {
+        pub_->publish(msg);
+    }
+
+    template<typename F>
+    void send(F&& builder) {
+        MsgT msg{};
+        builder(msg);
         pub_->publish(msg);
     }
 

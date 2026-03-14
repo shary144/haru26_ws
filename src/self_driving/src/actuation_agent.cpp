@@ -2,9 +2,12 @@
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include "robomas_interfaces/msg/robomas_packet.hpp"
 #include "robomas_interfaces/msg/motor_command.hpp"
+
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
 #include "my_tf2.hpp"
+#include "frame_viz.hpp"
+#include "topic.hpp"
 
 #include <vector>
 #include <array>
@@ -13,42 +16,48 @@
 #include <cmath>
 #include <algorithm>
 
-#define INIT_PARAM(name) \
-  this->declare_parameter<decltype(name)>(#name, name); \
-  this->get_parameter(#name, name);
-
-class NavNode : public rclcpp::Node
+class NavNode : public rclcpp::Node, 
+public FrameViz<NavNode>
 {
 public:
   NavNode()
   : Node("actuation_agent", 
     rclcpp::NodeOptions().allow_undeclared_parameters(true)),
-    frame_link("frame_link"),lidar("lidar_frame"),map("map")
+    //Topic
+    target_pose(this,"target_pose"), //Listener
+    robot_pose_icp(this,"robot_pose_icp"), //get_latest
+    motor_cmd_array(this,"/robomas/motor_cmd_array"), //publish
+    pursuit_status(this,"/pursuit/status"), //pusblish
+    feedback(this,"/robomas/feedback"), //get_latest
+    //座標系
+    base_link("base_link"),
+    lidar("lidar_frame"),
+    map("map"),
+    motor1("motor1"),
+    motor2("motor2"),
+    motor3("motor3")
   {
-    // ICP 推定結果の購読
-    sub_pose_ = create_subscription<std_msgs::msg::Float32MultiArray>(
-      "robot_pose_icp", 10,
-      std::bind(&NavNode::pose_callback, this, std::placeholders::_1));
+    //target_poseにコールバックつける
+    target_pose.listen([this](const auto& msg){
+      this->target_callback(msg);
+    });
 
-    // 目標値の購読
-    sub_target_ = create_subscription<self_driving::msg::Target>(
-      "/target_pose", 10,
-      std::bind(&NavNode::target_callback, this, std::placeholders::_1));
+    lidar.set_base(base_link(
+      lidar_offset_x,
+      lidar_offset_y,
+      lidar_offset_yaw));
 
-    // publisher_cmd
-    pub_cmd_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>(
-      "/robomas/cmd", 10);
-
-    // 到達ステータスをpublish
-    pub_status_ = this->create_publisher<self_driving::msg::TargetStatus>(
-      "/pursuit/status", 10);
-    
-
-    this->lidar.set_base(this->frame_link(
-      this->lidar_offset_x,
-      this->lidar_offset_y,
-      this->lidar_offset_yaw));
-    RCLCPP_INFO(get_logger(), "my_pure_pursuit_node started");
+    //モーターの相対位置設定
+    std::array<my_tf2::Frame,3> motors = {motor1, motor2, motor3};
+    for (int i=0;i<3;i++){
+      double th = std::numbers::pi*(1+i*2)/3;
+      motors[i].set_base(base_link(
+        L*std::cos(th),
+        L*std::sin(th),
+        th+std::numbers::pi/2)
+      );
+    }
+    RCLCPP_INFO(get_logger(), "actuation_agent started");
   }
 
 private:
@@ -56,137 +65,115 @@ private:
   double lidar_offset_x = 0.286;
   double lidar_offset_y = -0.165;
   double lidar_offset_yaw = -1.047;
-  double nav_radius = 0.3;
+  double x_threshold = 0.3;
+  double y_threshold = 0.3;
+  double yaw_threshold = 0.1;
   double pgain_x = 0.5;
   double pgain_y = 1.0;
   double pgain_theta = 1.0;
   double L= 0.33;
 
-  rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_;
-  rclcpp::Subscription<self_driving::msg::Target>::SharedPtr sub_target_;
-  rclcpp::Publisher<robomas_interfaces::msg::RobomasPacket>::SharedPtr pub_cmd_;
-  rclcpp::Publisher<self_driving::msg::TargetStatus>::SharedPtr pub_status_;
-  Frame frame_link;
-  Frame lidar;
-  Frame map;
-  std::deque<std::array<double, 3>> history_; // 履歴用
-  self_driving::msg::Target latest_target_;   // 最新の目標値
-  bool has_target_ = false;                   // 目標が来たかどうか
+  //座標系の宣言
+  my_tf2::Frame frame_link;
+  my_tf2::Frame lidar;
+  my_tf2::Frame map;
+  my_tf2::Frame motor1;
+  my_tf2::Frame motor2;
+  my_tf2::Frame motor3;
+  
+  //topicラッパークラス
+  Topic<std_msgs::msg::Float32MultiArray> robot_pose_icp;
+  Topic<self_driving::msg::Target> target_pose;
+  Topic<self_driving::msg::TargetStatus> pursuit_status;
+  Topic<robomas_interfaces::msg::RobomasPacket> motor_cmd_array;
+  Topic<robomas_interfaces::msg::RobomasFrame> feedback;
 
-  // ==========================
-  // ICP callback
-  // ==========================
-  void pose_callback(const std_msgs::msg::Float32MultiArray::SharedPtr icp_msg)
+  std::deque<std::array<double, 3>> history_;
+
+  void target_callback(const self_driving::msg::Target& target_msg)
   {
-    if (icp_msg->data.size() < 3) return;
-    //　まだ一度も目標を受信していない
-    //or 目標に到達してから新しい目標を受信していない場合は何もしない
-    if (!has_target_) return;
+    uint8_t index = target_msg.index;
+    uint8_t mode = target_msg.mode;
+    double tx = target_msg.x;
+    double ty = target_msg.y;
+    double tyaw = target_msg.yaw;
 
-    double [x,y,yaw] = icp_msg->data;
+    if (auto icp_msg = robot_pose_icp.use_latest()){
+      double x = icp_msg->data[0];
+      double y = icp_msg->data[1];
+      double yaw = icp_msg->data[2]; 
+      // LiDARの位置と向きを考慮してロボットの位置と向きを求める
+      this->lidar.set_base(this->map(x,y,yaw));
+    } else return;
 
-    // LiDARの位置と向きを考慮してロボットの位置と向きを求める
-    this->lidar.set_base(this->map(x,y,yaw));
-    auto [robot_x,robot_y,robot_yaw] = this->frame_link(this->map(x,y,yaw));
+    if (mode == 0) {
+      //足回りpursuit
+      my_tf2::Pose tpose{tx,ty,tyaw,this->map};
+      move_to(tpose);
 
-    double tx = this->latest_target_.x; // 目標値
-    double ty = this->latest_target_.y;
-    double tyaw = this->latest_target_.yaw;
-    //ここに画像認識から推定した自己位置とlidarから推定した自己位置を
-    //"confidence"で内分して最終目標値にする
-
-    navigate(robot_x, robot_y, robot_yaw, tx, ty, tyaw);
-  }
-
-  void target_callback(const self_driving::msg::Target::SharedPtr msg)
-  {
-    latest_target_ = *msg;
-    has_target_ = true;
-  }
-
-  // ==========================
-  // ナビゲーション本体
-  // ==========================
-  void navigate(double x, double y, double yaw,
-                double target_x, double target_y, double target_yaw)
-  {
-    // 世界座標での誤差→ロボット座標での誤差
-    auto [ex,ey,eyaw] = this->frame_link(this->map(target_x-x,target_y-y,normalize_angle(target_yaw - yaw)))
-
-    // 制御入力（P制御）
-    double vx = this->pgain_x * ex;
-    double vy = this->pgain_y * ey;
-    double wz = this->pgain_theta * eyaw;
-    /*
-    // 安定化のための制限
-    vx = std::clamp(vx, -0.3, 0.3);
-    vy = std::clamp(vy, -0.3, 0.3);
-    wz = std::clamp(wz, -1.5, 1.5);
-    */
-
-    // 到達判定
-    double dist = std::sqrt(ex * ex + ey * ey);
-    self_driving::msg::TargetStatus status;
-    if (dist < nav_radius) {
-      publish_stop();
-
-      // ここで TargetStatus を publish してもいい
-      status.status= 1; // 到達
-      has_target_ = false; // 新しい目標が来るまで動かないようにする
-    } else {
-      status.status= 0; // 未到達
-      publish_cmd(vx, vy, wz);
+    } else if (mode == 1){
+      //把持 モーター165回転
+      //動作継続
+      /*
+      if (this->prev_mode == mode){
+        if (this->start_time-this->now()) >= rclcpp::durable(5);
+      } else {
+        this->start_time = this->now();
+      }
+      
+      motor_cmd_array.publish{
+        [this](auto &out){
+          robomas_interfaces::msg::MotorCommand cmd;
+          cmd.id = 5;
+          cmd.mode = 2; //位置(角度)制御
+          if (auto fbmsg = this->feedback.use_latest())
+          else return;
+          fbmsg 
+          cmd.target = 360*8; //仮
+          out.push_back(cmd)
+        }
+      };*/
+      
+    } else if (mode == 2){
+      //射出
+      //control::shoot
     }
-    pub_status_->publish(status);
-  }
+    
+    pursuit_status.publish([this](auto& status)
+    {
+      status.index=index;
+      status.isend=false;
+    });
+  }  
 
-  // ==========================
-  // 速度 publish
-  // ==========================
-  void publish_cmd(double vx, double vy, double wz)
-  {
-    double vw1 = -0.5 * vx + 0.866 * vy + this->L * wz;  // 前左（+60°）
-    double vw2 = -0.5 * vx - 0.866 * vy + this->L * wz;  // 前右（-60°）
-    double vw3 = 1.0 * vx + this->L * wz;                // 後ろ（180°）
 
-    double max_w = std::max({std::abs(vw1), std::abs(vw2), std::abs(vw3)});
-    if (max_w == 0.0) max_w = 1.0; // ゼロ割防止
+  void move_to(my_tf2::Pose& tpose/*map座標系の目標位置になる*/){
+      motor_cmd_array.publish(
+        [this](auto &out){
+          auto tbpose = this->base_link(tpose);
+          tbpose.x*=pgain_x;
+          tbpose.y*=pgain_y;
+          double yaw = tbpose.yaw = normalize(tbpose.yaw)*pgain_theta;
 
-    double scale = 1000.0f / max_w;
-    vw1 *= scale;
-    vw2 *= scale;
-    vw3 *= scale;
-
-    auto msg = robomas_interfaces::msg::RobomasPacket();
-
-    // motor1(足回り)
-    robomas_interfaces::msg::MotorCommand cmd1;
-    cmd1.motor_id = 1;
-    cmd1.mode = 1;
-    cmd1.target = vw1;
-    msg.motors.push_back(cmd1);
-
-    // motor2(足回り)
-    robomas_interfaces::msg::MotorCommand cmd2;
-    cmd2.motor_id = 2;
-    cmd2.mode = 1;
-    cmd2.target = vw2;
-    msg.motors.push_back(cmd2);
-
-    // motor3(足回り)
-    robomas_interfaces::msg::MotorCommand cmd3;
-    cmd3.motor_id = 3;
-    cmd3.mode = 1;
-    cmd3.target = vw3;
-    msg.motors.push_back(cmd3);
-
-    pub_cmd_->publish(msg);
-  }
-
-////////////////////////////////////////////////////////
-  void publish_stop()
-  {
-    publish_cmd(0.0, 0.0, 0.0);
+          std::vector<my_tf2::Frame*> motor= {*motor1,*motor2,*motor3};
+          float maxv = 0
+          float v = 0;
+          for (int i=0;i<3;i++)
+          {
+            robomas_interfaces::msg::MotorCommand cmd;
+            cmd.id = i;
+            cmd.mode = 1;
+            v = std::abs(cmd.target = (*motor[i])(tpose).x + yaw*this->L);
+            if (maxv<v) maxv=v;
+            my_tf2::Pose pos;
+            pos.x = cmd.target;
+            pos.frame = motor[i];
+            viz_pos(this->map,pos);
+            out.motors.push_back(cmd);
+          }
+        }
+      );
+    
   }
 
   // ==========================

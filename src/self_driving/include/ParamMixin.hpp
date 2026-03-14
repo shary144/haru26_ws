@@ -1,6 +1,10 @@
 template<class Derived>
-class ParamMixin {
+class ParamMixin : public Derived{
 public:
+    ParamMixin(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
+        : Derived(options)
+    {}
+    
     template<typename T>
     void param(const std::string& name, T& variable) {
         // declare_parameter でデフォルト値を公開

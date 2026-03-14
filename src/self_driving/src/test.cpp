@@ -9,17 +9,15 @@
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
 #include <cmath>
+#include <cassert>
+#include "topic.hpp"
 
 class ManagerNode : public rclcpp::Node
 {
 public:
     ManagerNode()
-    : Node("test_node")
+    : Node("test_node"), target_pose(this, "target_pose")
     {
-        pub_pose_ = this->create_publisher<self_driving::msg::Target>(
-            "target_pose", 10
-        );
-
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(500),
             std::bind(&ManagerNode::publish_once, this)
@@ -28,17 +26,19 @@ public:
 private:
     void publish_once() {
         //目標値をpublishして挙動を確認(テスト用)
-        self_driving::msg::Target msg;
-        msg.index=0;
-        msg.x=1.0;
-        msg.y=2.0;
-        msg.yaw=0.5;
-        pub_pose_->publish(msg);
-        RCLCPP_INFO(get_logger(), "Published target pose: index=%d, x=%.2f, y=%.2f, yaw=%.2f", 
-                    msg.index, msg.x, msg.y, msg.yaw);
+        target_pose.publish([&](auto& msg){
+            msg.index = 0;
+            msg.mode = 0;
+            msg.x = 1.0;
+            msg.y = 2.0;
+            msg.yaw = 0.5;
+            printf("%d,%lf,%lf,%lf",msg.index,msg.x,msg.y,msg.yaw);
+            //RCLCPP_INFO(get_logger(), "Published target pose: index=%d, x=%.2f, y=%.2f, yaw=%.2f", 
+            //        msg.index, msg.x, msg.y, msg.yaw);
+        });
     }
     rclcpp::TimerBase::SharedPtr timer_;   // ← これが必要！
-    rclcpp::Publisher<self_driving::msg::Target>::SharedPtr pub_pose_;
+    Topic<self_driving::msg::Target> target_pose;
 };
 int main(int argc, char **argv)
 {

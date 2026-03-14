@@ -16,6 +16,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(robomas_interfaces REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 # --- Generate messages BEFORE building nodes ---
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -44,8 +45,8 @@ ament_target_dependencies(icp_tf_broadcaster
   rclcpp geometry_msgs nav_msgs tf2 tf2_ros tf2_geometry_msgs
 )
 
-ament_target_dependencies(my_pure_pursuit_node
-  rclcpp std_msgs robomas_interfaces
+ament_target_dependencies(actuation_agent
+  rclcpp std_msgs robomas_interfaces tf2 tf2_geometry_msgs tf2_ros visualization_msgs
 )
 ament_target_dependencies(test_node
   rclcpp std_msgs
@@ -54,7 +55,7 @@ ament_target_dependencies(test_node
 
 # 生成されたメッセージヘッダーへの依存設定
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
-target_link_libraries(my_pure_pursuit_node "${cpp_typesupport_target}")
+target_link_libraries(actuation_agent "${cpp_typesupport_target}")
 target_link_libraries(test_node "${cpp_typesupport_target}")
 
 include_directories(include)
@@ -63,7 +64,7 @@ include_directories(include)
 install(TARGETS
   pure_pursuit_node
   icp_tf_broadcaster
-  my_pure_pursuit_node
+  actuation_agent
   test_node
   DESTINATION lib/${PROJECT_NAME}
 )
