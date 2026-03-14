@@ -37,12 +37,21 @@ private:
     }
 
     void fanfare() { // ファンファーレを示す
-        auto msg_syudou = robomas_interfaces::msg::CanFrame();
-        msg_syudou.id = 0x001;         // 送信したいCAN ID
-        msg_syudou.dlc = 8;            // データ長
-        msg_syudou.data = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+        auto msg_fanfare = robomas_interfaces::msg::CanFrame();
+        msg_fanfare.id = 0x001;         // 送信したいCAN ID
+        msg_fanfare.dlc = 8;            // データ長
+        msg_fanfare.data = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
         
-        can_pub_->publish(msg_syudou);
+        can_pub_->publish(msg_fanfare);
+    }
+
+    void fanfare_no() { // ファンファーレを示す
+        auto msg_fanfare_no = robomas_interfaces::msg::CanFrame();
+        msg_fanfare_no.id = 0x001;         // 送信したいCAN ID
+        msg_fanfare_no.dlc = 8;            // データ長
+        msg_fanfare_no.data = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        
+        can_pub_->publish(msg_fanfare_no);
     }
 
     void joy_callback(const sensor_msgs::msg::Joy::SharedPtr joyinfo){
@@ -99,16 +108,21 @@ private:
         // Publish!
         pub_motor_->publish(msg);
         
-        if (joyinfo->buttons[3]) {// Yボタンが押されたら
-            jidou();// 自動制御
-        }
-    //     else { // Yボタンを離したら
-    //         syudou(); // 手動制御
-    //     }
+        // if (joyinfo->buttons[3]) {// Yボタンが押されたら
+        //     jidou();// 自動制御
+        // }
+        //  else { // Yボタンを離したら
+        //      syudou(); // 手動制御
+        //  }
 
-    //     if (joyinfo->buttons[2]){ // Bボタンが押されたら
-    //         fanfare(); // ファンファーレ達成
-    //     }
+        //  if (joyinfo->buttons[2]){ // Bボタンが押されたら
+        //      fanfare(); // ファンファーレ達成
+        //  }
+
+        //  else {
+        //     fanfare_no();
+        //  }
+
         RCLCPP_INFO(this->get_logger(), "joy_callback");
      }
 
