@@ -71,6 +71,8 @@ private:
       const float r = msg->ranges[i];
       if (!std::isfinite(r)) continue;
       if (r < range_min || r > range_max) continue;
+      //ここ変えました、あとで戻す
+      if (r < 0.3) continue;
 
       const double a = msg->angle_min + static_cast<double>(i) * msg->angle_increment;
       const double x = static_cast<double>(r) * std::cos(-a);

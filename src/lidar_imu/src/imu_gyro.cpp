@@ -447,9 +447,10 @@ void PoseIMU()
   pre_ay_ = a_vec(1);
   pre_az_ = a_vec(2);
 
-  x_ += 0.5*(pre_vx_+vx_)*dt_;
-  y_ += 0.5*(pre_vy_+vy_)*dt_;
-  z_ += 0.5*(pre_vz_+vz_)*dt_;
+  // debug
+  // x_ += 0.5*(pre_vx_+vx_)*dt_;
+  // y_ += 0.5*(pre_vy_+vy_)*dt_;
+  // z_ += 0.5*(pre_vz_+vz_)*dt_;
 
   pre_vx_ = vx_;
   pre_vy_ = vy_;

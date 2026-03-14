@@ -84,9 +84,10 @@ private:
     // -------------------------------------
 
     // LiDARの位置と向きを考慮してロボットの位置と向きを逆算
-    double robot_x = x + this->lidar_offset_x * std::cos(yaw) - this->lidar_offset_y * std::sin(yaw);
-    double robot_y = y + this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
-    double robot_yaw = yaw - this->lidar_offset_yaw;
+    //self<map> = icp<map> + offset<base_link>
+    double robot_x = x + this->lidar_offset_x * std::cos(yaw) + this->lidar_offset_y * std::sin(yaw);
+    double robot_y = y - this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
+    double robot_yaw = yaw + this->lidar_offset_yaw;
 
     // まだ一度も目標を受信していない
     //or 目標に到達してから新しい目標を受信していない場合は何もしない
