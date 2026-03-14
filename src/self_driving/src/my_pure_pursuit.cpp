@@ -11,6 +11,7 @@
 #include <map>
 #include <cmath>
 #include <algorithm>
+#include <stdio.h>
 
 #define INIT_PARAM(name) \
   this->declare_parameter<decltype(name)>(#name, name); \
@@ -87,6 +88,7 @@ private:
     double robot_x = x + this->lidar_offset_x * std::cos(yaw) - this->lidar_offset_y * std::sin(yaw);
     double robot_y = y + this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
     double robot_yaw = yaw - this->lidar_offset_yaw;
+    printf("%lf %lf %lf\n", robot_x,robot_y,robot_yaw);
 
     // まだ一度も目標を受信していない
     //or 目標に到達してから新しい目標を受信していない場合は何もしない
@@ -161,7 +163,7 @@ private:
     double max_w = std::max({std::abs(vw1), std::abs(vw2), std::abs(vw3)});
     if (max_w == 0.0) max_w = 1.0; // ゼロ割防止
 
-    double scale = 1000.0f / max_w;
+    double scale = 300.0f / max_w;
     vw1 *= scale;
     vw2 *= scale;
     vw3 *= scale;

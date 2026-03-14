@@ -15,6 +15,7 @@ public:
         sub_joy_   = this->create_subscription<sensor_msgs::msg::Joy>("joy", 10, std::bind(&MyRobotNode::joy_callback, this, std::placeholders::_1));        
         pub_motor_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>("/robomas/cmd", 10);
         can_pub_   = this->create_publisher<robomas_interfaces::msg::CanFrame>("/robomas/can_tx", 10);
+        sub_motor_ = this->create_subscription<robomas_interfaces::msg::RobomasFrame>("joy", 10, std::bind(&MyRobotNode::joy_callback, this, std::placeholders::_1));
     }
 
 private:
@@ -87,7 +88,7 @@ private:
         robomas_interfaces::msg::MotorCommand cmd4;
         cmd4.motor_id = 4;
         cmd4.mode = 1;
-        cmd4.target = -3500.0f * (/*joyinfo->buttons[3]*/ - joyinfo->buttons[1]); // Yボタンで上昇、Aボタンで何も起こらない
+        cmd4.target = -3500.0f * (/*joyinfo->buttons[3]*/ - joyinfo->buttons[1]); // Aボタンで上昇、Yボタンで何も起こらない
         //Aボタンじゃないと壊れる右buttons[1]=1のとき→cmd.target > 0
         msg.motors.push_back(cmd4);
 
@@ -95,14 +96,14 @@ private:
         robomas_interfaces::msg::MotorCommand cmd5;
         cmd5.motor_id = 5;
         cmd5.mode = 1;
-        cmd5.target = -1000.0f * joyinfo->axes[3]; // 右スティックで上昇、下降
+        cmd5.target = 1000.0f * joyinfo->axes[3]; // 右スティックで上昇、下降
         msg.motors.push_back(cmd5);
 
         //motor6(把持)
         robomas_interfaces::msg::MotorCommand cmd6;
         cmd6.motor_id = 6;
         cmd6.mode = 1;
-        cmd6.target = 1000.0f * (joyinfo->buttons[0] - joyinfo->buttons[2]);// Xボタンで、Aボタンで
+        cmd6.target = 1000.0f * (joyinfo->buttons[0] - joyinfo->buttons[2]);// Xボタンで、Bボタンで
         msg.motors.push_back(cmd6);
 
         // Publish!

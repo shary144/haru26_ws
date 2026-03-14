@@ -32,7 +32,7 @@ private:
         msg.index=0;
         msg.x=1.0;
         msg.y=2.0;
-        msg.yaw=0.5;
+        msg.yaw=0;
         pub_pose_->publish(msg);
         RCLCPP_INFO(get_logger(), "Published target pose: index=%d, x=%.2f, y=%.2f, yaw=%.2f", 
                     msg.index, msg.x, msg.y, msg.yaw);
