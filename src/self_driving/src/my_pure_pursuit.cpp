@@ -53,9 +53,9 @@ private:
   double lidar_offset_y = -0.165;
   double lidar_offset_yaw = -1.047;
   double nav_radius = 0.3;
-  double pgain_x = 0.5;
-  double pgain_y = 1.0;
-  double pgain_theta = 1.0;
+  double pgain_x = 1.5;
+  double pgain_y = 1.5;
+  double pgain_theta = 0.5;
   double L= 0.33;
 
   rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_;
@@ -158,14 +158,24 @@ private:
     double vw1 = -0.5 * vx + 0.866 * vy + this->L * wz;  // 前左（+60°）
     double vw2 = -0.5 * vx - 0.866 * vy + this->L * wz;  // 前右（-60°）
     double vw3 = 1.0 * vx + this->L * wz;                // 後ろ（180°）
+  //1. どれが一番大きいか決める
+  //2. 一番大きいやつとの比を取る
+  //3. 一番大きい値をクランプしたら2の比をかけてvw_iを導く
+    double stuck_v=0;
+    double scale = 1000.0f;
+    std::array<double,3> v{vw1*scale,vw2*scale,vw3*scale};
+    for (int i=0;i<3;i++)
+      if (std::abs(stuck_v) < std::abs(v[i])) stuck_v=v[i];
 
-    double max_w = std::max({std::abs(vw1), std::abs(vw2), std::abs(vw3)});
-    if (max_w == 0.0) max_w = 1.0; // ゼロ割防止
+    if (std::abs(stuck_v) < 1e-4) {
+      printf("%lf\n",stuck_v);
+      stuck_v = 0;
+    } else {
+      for (int i=0;i<3;i++)
+        v[i]/=stuck_v;
 
-    double scale = 1000.0f / max_w;
-    vw1 *= scale;
-    vw2 *= scale;
-    vw3 *= scale;
+      stuck_v = std::clamp((float)stuck_v,-1000.0f,1000.0f);
+    }
 
     auto msg = robomas_interfaces::msg::RobomasPacket();
 
@@ -173,21 +183,21 @@ private:
     robomas_interfaces::msg::MotorCommand cmd1;
     cmd1.motor_id = 1;
     cmd1.mode = 1;
-    cmd1.target = vw1;
+    cmd1.target = stuck_v*v[0];
     msg.motors.push_back(cmd1);
 
     // motor2(足回り)
     robomas_interfaces::msg::MotorCommand cmd2;
     cmd2.motor_id = 2;
     cmd2.mode = 1;
-    cmd2.target = vw2;
+    cmd2.target = stuck_v*v[1];
     msg.motors.push_back(cmd2);
 
     // motor3(足回り)
     robomas_interfaces::msg::MotorCommand cmd3;
     cmd3.motor_id = 3;
     cmd3.mode = 1;
-    cmd3.target = vw3;
+    cmd3.target = stuck_v*v[2];
     msg.motors.push_back(cmd3);
 
     pub_cmd_->publish(msg);
