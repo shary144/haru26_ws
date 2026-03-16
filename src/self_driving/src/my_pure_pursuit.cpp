@@ -51,8 +51,8 @@ private:
   // クラス要素一覧 ======================
   double lidar_offset_x = 0.286;
   double lidar_offset_y = -0.165;
-  double lidar_offset_yaw = -1.047;
-  double nav_radius = 0.3;
+  double lidar_offset_yaw = -2.094;
+  double nav_radius = 0.1;
   double pgain_x = 1;
   double pgain_y = 1;
   double pgain_theta = 1;//0.1
@@ -87,7 +87,8 @@ private:
     //self<map> = icp<map> + offset<base_link>
     double robot_x = x + this->lidar_offset_x * std::cos(yaw) + this->lidar_offset_y * std::sin(yaw);
     double robot_y = y - this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
-    double robot_yaw = yaw + this->lidar_offset_yaw;
+    double robot_yaw = yaw - this->lidar_offset_yaw;
+    printf("robot_body_pose:%lf,%lf,%lf\n",robot_x,robot_y,robot_yaw);
 
     // まだ一度も目標を受信していない
     //or 目標に到達してから新しい目標を受信していない場合は何もしない
@@ -111,23 +112,26 @@ private:
   // ==========================
   // ナビゲーション本体
   // ==========================
-  void navigate(double x, double y, double yaw,
+  void navigate(double robot_x, double robot_y, double robot_yaw,
                 double target_x, double target_y, double target_yaw)
   {
     // 世界座標での誤差
-    double ex = target_x - x;
-    double ey = target_y - y;
-    double e_yaw = normalize_angle(target_yaw - yaw);
+    double ex = target_x - robot_x;
+    double ey = target_y - robot_y;
+    double e_yaw = normalize_angle(target_yaw - robot_yaw);
 
     printf("e: %lf,%lf,%lf\n",ex,ey,e_yaw);
 
-    // ロボット座標系へ変換
-    double ex_b = std::cos(yaw) * ex + std::sin(yaw) * ey;
-    double ey_b = -std::sin(yaw) * ex + std::cos(yaw) * ey;
+    // baselink系へ変換
+    double ex_b = std::cos(robot_yaw) * ex + std::sin(robot_yaw) * ey;
+    double ey_b = -std::sin(robot_yaw) * ex + std::cos(robot_yaw) * ey;
 
-    printf("%lf\n",yaw);
+    printf("robot_yaw:%lf\n",robot_yaw);
 
+    //eに応じて
     // 制御入力（P制御）
+    double th_margin = 0.2;
+    double er = std::sqrt(ex*ex+ey*ey);
     double vx = this->pgain_x * ex_b;
     double vy = this->pgain_y * ey_b;
     double wz = this->pgain_theta * e_yaw;
@@ -139,6 +143,7 @@ private:
     */
 
     // 到達判定
+    /*
     double dist = std::sqrt(ex * ex + ey * ey);
     self_driving::msg::TargetStatus status;
     if (dist < nav_radius) {
@@ -152,17 +157,30 @@ private:
       publish_cmd(vx, vy, wz);
     }
     pub_status_->publish(status);
+  }*/
+  //  teishijoukennwohazusu
+    if (std::sqrt(ex*ex+ey*ey)<nav_radius) vx=vy=0;
+    if (std::abs(e_yaw)<=th_margin) wz=0;
+    if ((std::sqrt(ex*ex+ey*ey)<nav_radius)&&(e_yaw<=th_margin)) {
+      printf("END\n");
+    }
+
+    printf("vx,vy,wz=%lf,%lf,%lf\n",vx,vy,wz);
+    publish_cmd(vx,vy,wz);
   }
+  
+  
+
 
   // ==========================
   // 速度 publish
   // ==========================
   void publish_cmd(double vx, double vy, double wz)
   {
-    printf("%lf,%lf,%lf\n",vx,vy,wz);
-    double vw1 = 0.866 * vx + 0.5 * vy + this->L * wz;  // 前左（+60°）
-    double vw2 = -0.866 * vx + 0.5 * vy + this->L * wz;  // 前右（-60°）
-    double vw3 = -1.0 * vy + this->L * wz;                // 後ろ（180°）
+    //robotzahyoukei
+    double vw1 = -(0.866 * vx + 0.5 * vy + this->L * wz);  // 前左（+60°）
+    double vw2 = -(-0.866 * vx + 0.5 * vy + this->L * wz);  // 前右（-60°）
+    double vw3 = -(-1.0 * vy + this->L * wz);                // 後ろ（180°）
   //1. どれが一番大きいか決める
   //2. 一番大きいやつとの比を取る
   //3. 一番大きい値をクランプしたら2の比をかけてvw_iを導く
