@@ -53,9 +53,9 @@ private:
   double lidar_offset_y = -0.165;
   double lidar_offset_yaw = -1.047;
   double nav_radius = 0.3;
-  double pgain_x = 1.5;
-  double pgain_y = 1.5;
-  double pgain_theta = 0.5;
+  double pgain_x = 1;
+  double pgain_y = 1;
+  double pgain_theta = 1;//0.1
   double L= 0.33;
 
   rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_;
@@ -119,9 +119,13 @@ private:
     double ey = target_y - y;
     double e_yaw = normalize_angle(target_yaw - yaw);
 
+    printf("e: %lf,%lf,%lf\n",ex,ey,e_yaw);
+
     // ロボット座標系へ変換
     double ex_b = std::cos(yaw) * ex + std::sin(yaw) * ey;
     double ey_b = -std::sin(yaw) * ex + std::cos(yaw) * ey;
+
+    printf("%lf\n",yaw);
 
     // 制御入力（P制御）
     double vx = this->pgain_x * ex_b;
@@ -155,9 +159,10 @@ private:
   // ==========================
   void publish_cmd(double vx, double vy, double wz)
   {
-    double vw1 = -0.5 * vx + 0.866 * vy + this->L * wz;  // 前左（+60°）
-    double vw2 = -0.5 * vx - 0.866 * vy + this->L * wz;  // 前右（-60°）
-    double vw3 = 1.0 * vx + this->L * wz;                // 後ろ（180°）
+    printf("%lf,%lf,%lf\n",vx,vy,wz);
+    double vw1 = 0.866 * vx + 0.5 * vy + this->L * wz;  // 前左（+60°）
+    double vw2 = -0.866 * vx + 0.5 * vy + this->L * wz;  // 前右（-60°）
+    double vw3 = -1.0 * vy + this->L * wz;                // 後ろ（180°）
   //1. どれが一番大きいか決める
   //2. 一番大きいやつとの比を取る
   //3. 一番大きい値をクランプしたら2の比をかけてvw_iを導く
