@@ -2,6 +2,7 @@
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include "robomas_interfaces/msg/robomas_packet.hpp"
 #include "robomas_interfaces/msg/motor_command.hpp"
+#include "robomas_interfaces/msg/robomas_frame.hpp
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
 
@@ -35,7 +36,7 @@ public:
     sub_target_ = create_subscription<self_driving::msg::Target>(
       "/target_pose", 10,
       std::bind(&NavNode::target_callback, this, std::placeholders::_1));
-
+    
     // publisher_cmd
     pub_cmd_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>(
       "/robomas/cmd", 10);
@@ -43,6 +44,11 @@ public:
     // 到達ステータスをpublish
     pub_status_ = this->create_publisher<self_driving::msg::TargetStatus>(
       "/pursuit/status", 10);
+    
+    // フィードバックをする
+    sub_feedback_ = node->createSubscription<robomas_interfaces::msg::RobomasFrame>(
+      "/robomas/feedback",10,
+      std::bind(&NavNode::update_feedback, this, std::placeholders::_1));
 
     RCLCPP_INFO(get_logger(), "my_pure_pursuit_node started");
   }
@@ -62,10 +68,13 @@ private:
   rclcpp::Subscription<self_driving::msg::Target>::SharedPtr sub_target_;
   rclcpp::Publisher<robomas_interfaces::msg::RobomasPacket>::SharedPtr pub_cmd_;
   rclcpp::Publisher<self_driving::msg::TargetStatus>::SharedPtr pub_status_;
+  rclcpp::Subscription<robomas_interfaces::msg::RobomasFrame>::SharedPtr sub_feedback_;
 
   std::deque<std::array<double, 3>> history_; // 履歴用
   self_driving::msg::Target latest_target_;   // 最新の目標値
+  robomas_interfaces::msg::RobomasFrame feedback_msg; //フィードバックを持たせる
   bool has_target_ = false;                   // 目標が来たかどうか
+
 
   // ==========================
   // ICP callback
@@ -77,11 +86,6 @@ private:
     double x = msg->data[0];
     double y = msg->data[1];
     double yaw = msg->data[2];
-
-    // ---- 平均化したい場合はここを ON ----
-    // add_history(x, y, yaw);
-    // auto [fx, fy, fyaw] = filtered_pose();
-    // -------------------------------------
 
     // LiDARの位置と向きを考慮してロボットの位置と向きを逆算
     //self<map> = icp<map> + offset<base_link>
@@ -97,8 +101,6 @@ private:
     double tx = this->latest_target_.x; // 目標値
     double ty = this->latest_target_.y;
     double tyaw = this->latest_target_.yaw;
-    //ここに画像認識から推定した自己位置とlidarから推定した自己位置を
-    //"confidence"で内分して最終目標値にする
 
     navigate(robot_x, robot_y, robot_yaw, tx, ty, tyaw);
   }
@@ -107,6 +109,10 @@ private:
   {
     latest_target_ = *msg;
     has_target_ = true;
+  }
+  void update_feedback(const robomas_interfaces::msg::RobomasFrame::SharedPtr msg)
+  {
+    feedback_msg = *msg;
   }
 
   // ==========================
@@ -159,18 +165,21 @@ private:
     pub_status_->publish(status);
   }*/
   //  teishijoukennwohazusu
+    self_driving::msg::TargetStatus status;
+    status.index = latest_target_.index;
     if (std::sqrt(ex*ex+ey*ey)<nav_radius) vx=vy=0;
     if (std::abs(e_yaw)<=th_margin) wz=0;
     if ((std::sqrt(ex*ex+ey*ey)<nav_radius)&&(e_yaw<=th_margin)) {
+      status.status = true;
       printf("END\n");
+    } else {
+      status.status = false;
     }
 
     printf("vx,vy,wz=%lf,%lf,%lf\n",vx,vy,wz);
     publish_cmd(vx,vy,wz);
   }
   
-  
-
 
   // ==========================
   // 速度 publish
@@ -260,6 +269,16 @@ private:
     }
     size_t n = history_.size();
     return {sx / n, sy / n, syaw / n};
+  }
+
+  void shoot() {
+    angleControl control()
+    auto msg = robomas_interfaces::msg::RobomasPacket();
+    robomas_interfaces::msg::MotorCommand cmd;
+    cmd.id = 4;
+    control.motor(feedback_msg,cmd,3500,360*18*9);
+    msg.motors.push_back(cmd3);
+    pub_cmd_->publish(msg);
   }
 };
 

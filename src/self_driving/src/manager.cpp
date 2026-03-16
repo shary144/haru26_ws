@@ -9,6 +9,7 @@
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
 #include <cmath>
+
 template <typename MsgT>
 class LatestValueSubscriber {
 public:
@@ -32,7 +33,71 @@ private:
     MsgT latest_;
     bool has_value_ = false;
 };
+#include <vector>
+#include <cmath>
 
+namespace ballcache {
+
+struct Ball {
+    int color_id;   // 0,1,2
+    float x;
+    float y;
+    bool onstage = false;
+    size_t N = 0;   // 観測回数
+};
+
+class BallCache {
+public:
+    double inclusive_radius = 0.3; // 同一ボールとみなす距離
+    std::vector<Ball> ball_array;
+
+    // 新しい観測をキャッシュに吸収する
+    void enroll_ball_array(const std::vector<Ball>& new_ball_array) {
+
+        // 初回は丸ごとコピー
+        if (ball_array.empty()) {
+            ball_array = new_ball_array;
+            for (auto& b : ball_array) {
+                b.N = 1;
+                b.onstage = true;
+            }
+            return;
+        }
+
+        // 既存ボールに対応付け
+        for (auto& new_ball : new_ball_array) {
+            bool matched = false;
+
+            for (auto& ball : ball_array) {
+                if (ball.color_id != new_ball.color_id)
+                    continue;
+
+                double dx = ball.x - new_ball.x;
+                double dy = ball.y - new_ball.y;
+                double d = std::sqrt(dx*dx + dy*dy);
+
+                if (d < inclusive_radius) {
+                    // 加重平均で更新
+                    ball.x = (new_ball.x + ball.N * ball.x) / (ball.N + 1);
+                    ball.y = (new_ball.y + ball.N * ball.y) / (ball.N + 1);
+                    ball.N++;
+                    ball.onstage = true;
+                    matched = true;
+                    break;
+                }
+            }
+
+            // どの既存ボールにもマッチしなかった → 新規ボール
+            if (!matched) {
+                Ball b = new_ball;
+                b.N = 1;
+                b.onstage = true;
+                ball_array.push_back(b);
+            }
+        }
+    }
+};
+}
 
 class ManagerNode : public rclcpp::Node
 {
@@ -48,6 +113,10 @@ public:
         pub_pose_ = this->create_publisher<self_driving::msg::Target>(
             "target_pose", 10
         );
+        sub_pose_icp_ = create_subscription<std_msgs::msg::Float32MultiArray>(
+            "robot_pose_icp", 10,
+            std::bind(&ManagerNode::pose_callback, this, std::placeholders::_1)
+        );
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(500),
             std::bind(&ManagerNode::publish_once, this)
@@ -57,7 +126,8 @@ public:
 private:
     rclcpp::Subscription<self_driving::msg::TargetStatus>::SharedPtr sub_status_;
     rclcpp::Publisher<self_driving::msg::Target>::SharedPtr pub_pose_;
-    void run_promise_chain() //主制御のコールバック
+    rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_icp;
+    void run_promise_chain(); //主制御のコールバック
     void update_status();
 
     //ルート定義系
@@ -150,6 +220,7 @@ private:
     {
         self_driving::msg::Target msg;
         msg.index = waypoint_id_;
+        msg.mode = 0; //pure_pursuit
         msg.x=x;
         msg.y=y;
         msg.yaw=yaw;
