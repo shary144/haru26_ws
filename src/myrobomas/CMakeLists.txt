@@ -20,14 +20,24 @@ add_executable(my_robot_node
   src/asimawari.cpp
 )
 
+add_executable(my_jidou_node
+  src/asimawari_jidou.cpp
+)
+
 ament_target_dependencies(my_robot_node
   rclcpp
   sensor_msgs
   robomas_interfaces
 )
 
+ament_target_dependencies(my_jidou_node
+  rclcpp
+  sensor_msgs
+  robomas_interfaces
+)
 install(TARGETS
   my_robot_node
+  my_jidou_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

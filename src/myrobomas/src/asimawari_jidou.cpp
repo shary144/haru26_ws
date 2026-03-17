@@ -9,11 +9,10 @@
 
 using namespace std::chrono_literals;
 
-class MyRobotNode : public rclcpp::Node {
+class MyJidouNode : public rclcpp::Node {
 public:
-    MyRobotNode() : Node("my_robot_node") {
-        // Publisherの作成
-        sub_joy_   = this->create_subscription<sensor_msgs::msg::Joy>("joy", 10, std::bind(&MyRobotNode::joy_callback, this, std::placeholders::_1));        
+    MyJidouNode() : Node("my_jidou_node") {
+        // Publisherの作成    
         pub_motor_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>("/robomas/cmd", 10);
         can_pub_   = this->create_publisher<robomas_interfaces::msg::CanFrame>("/robomas/can_tx", 10);
         sub_motor_  = this->create_subscription<robomas_interfaces::msg::RobomasFrame>("/robomas/feedback", 10, std::bind(&MyRobotNode::motor_callback, this, std::placeholders::_1));
@@ -278,8 +277,7 @@ private:
         // if (joyinfo->buttons[11]) { // 右スティックが押されたら
         //     down();
         // }
-        // 
-/*
+
         switch(step)
         {
         case 0:
@@ -316,8 +314,6 @@ private:
             if(haji_close()) step++;
             break;
         }
-*/
-
         std::cout << step << motor6_th_now << std::endl;
     }
 

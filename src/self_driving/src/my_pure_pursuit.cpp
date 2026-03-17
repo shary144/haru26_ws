@@ -34,7 +34,7 @@ public:
     // 目標値の購読
     sub_target_ = create_subscription<self_driving::msg::Target>(
       "/target_pose", 10,
-      std::bind(&NavNode::target_callback, this, std::placeholders::_1));
+      std::bind(&NavNode::target_callback, this, std::placeholders::_1)); 
 
     // publisher_cmd
     pub_cmd_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>(
