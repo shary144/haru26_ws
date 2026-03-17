@@ -2,7 +2,7 @@
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include "robomas_interfaces/msg/robomas_packet.hpp"
 #include "robomas_interfaces/msg/motor_command.hpp"
-#include "robomas_interfaces/msg/robomas_frame.hpp
+#include "robomas_interfaces/msg/robomas_frame.hpp"
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
 
@@ -26,7 +26,6 @@ public:
     
   )
   {
-
     // ICP 推定結果の購読
     sub_pose_ = create_subscription<std_msgs::msg::Float32MultiArray>(
       "robot_pose_icp", 10,
@@ -46,7 +45,7 @@ public:
       "/pursuit/status", 10);
     
     // フィードバックをする
-    sub_feedback_ = node->createSubscription<robomas_interfaces::msg::RobomasFrame>(
+    sub_feedback_ = this->create_subscription<robomas_interfaces::msg::RobomasFrame>(
       "/robomas/feedback",10,
       std::bind(&NavNode::update_feedback, this, std::placeholders::_1));
 
@@ -175,6 +174,7 @@ private:
     } else {
       status.status = false;
     }
+    pub_status_->publish(status);
 
     printf("vx,vy,wz=%lf,%lf,%lf\n",vx,vy,wz);
     publish_cmd(vx,vy,wz);
@@ -270,16 +270,16 @@ private:
     size_t n = history_.size();
     return {sx / n, sy / n, syaw / n};
   }
-
+  /*
   void shoot() {
-    angleControl control()
+    angleControl control();
     auto msg = robomas_interfaces::msg::RobomasPacket();
     robomas_interfaces::msg::MotorCommand cmd;
     cmd.id = 4;
     control.motor(feedback_msg,cmd,3500,360*18*9);
-    msg.motors.push_back(cmd3);
+    msg.motors.push_back(cmd);
     pub_cmd_->publish(msg);
-  }
+  }*/
 };
 
 int main(int argc, char **argv)
