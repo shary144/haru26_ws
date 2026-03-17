@@ -12,7 +12,7 @@ public:
     
     // feedback_sub_へのコールバック
     bool motor( robomas_interfaces::msg::RobomasFrame feedback_msg, robomas_interfaces::msg::MotorCommand& cmd, 
-        double ta_angle, double ta_v, bool negfrag,bool init)
+        double ta_angle, double ta_v, bool negfrag, bool init)
     {
         if (init){
             phase = 0;

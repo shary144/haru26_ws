@@ -62,6 +62,7 @@ private:
         case 0:
             printf("start\n");
             if (pursuit({0.35, 5.888, M_PI/2})) {
+                printf("koko!");
                 phase = 1;
                 inner_order = 0;
             }
@@ -160,6 +161,19 @@ private:
         msg.mode  = 1;
         pub_pose_->publish(msg);
 
+        if (status_msg_.status) {
+            status_msg_.status = false;
+            return true;
+        }
+        return false;
+    }
+    bool grip()
+    {
+        self_driving::msg::Target msg;
+        msg.index = 0;
+        msg.mode  = 2;
+        pub_pose_->publish(msg);
+        
         if (status_msg_.status) {
             status_msg_.status = false;
             return true;

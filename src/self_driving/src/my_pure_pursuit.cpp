@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
+
 #include "robomas_interfaces/msg/robomas_packet.hpp"
 #include "robomas_interfaces/msg/motor_command.hpp"
 #include "robomas_interfaces/msg/robomas_frame.hpp"
@@ -10,116 +11,132 @@
 #include <vector>
 #include <array>
 #include <deque>
-#include <map>
 #include <cmath>
 #include <algorithm>
-
-#define INIT_PARAM(name) \
-  this->declare_parameter<decltype(name)>(#name, name); \
-  this->get_parameter(#name, name);
 
 class NavNode : public rclcpp::Node
 {
 public:
   NavNode()
-  : Node("my_pure_pursuit_node", 
-    rclcpp::NodeOptions().allow_undeclared_parameters(true)
-    
-  )
+  : Node("my_pure_pursuit_node",
+         rclcpp::NodeOptions().allow_undeclared_parameters(true))
   {
-    // ICP 推定結果の購読
     sub_pose_ = create_subscription<std_msgs::msg::Float32MultiArray>(
       "robot_pose_icp", 10,
       std::bind(&NavNode::pose_callback, this, std::placeholders::_1));
 
-    // 目標値の購読
     sub_target_ = create_subscription<self_driving::msg::Target>(
       "/target_pose", 10,
       std::bind(&NavNode::target_callback, this, std::placeholders::_1));
-    
-    // publisher_cmd
+
     pub_cmd_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>(
       "/robomas/cmd", 10);
 
-    // 到達ステータスをpublish
     pub_status_ = this->create_publisher<self_driving::msg::TargetStatus>(
       "/pursuit/status", 10);
-    
-    // フィードバックをする
+
     sub_feedback_ = this->create_subscription<robomas_interfaces::msg::RobomasFrame>(
-      "/robomas/feedback",10,
+      "/robomas/feedback", 10,
       std::bind(&NavNode::update_feedback, this, std::placeholders::_1));
 
     RCLCPP_INFO(get_logger(), "my_pure_pursuit_node started");
   }
 
 private:
-  // クラス要素一覧 ======================
-  double lidar_offset_x = 0.286;
-  double lidar_offset_y = -0.165;
+  // パラメータ・状態
+  double lidar_offset_x   = 0.286;
+  double lidar_offset_y   = -0.165;
   double lidar_offset_yaw = -2.094;
-  double nav_radius = 0.1;
-  double pgain_x = 1;
-  double pgain_y = 1;
-  double pgain_theta = 1;//0.1
-  double L= 0.33;
+  double nav_radius       = 0.1;
+  double pgain_x          = 1.0;
+  double pgain_y          = 1.0;
+  double pgain_theta      = 1.0;
+  double L                = 0.33;
 
   rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_;
-  rclcpp::Subscription<self_driving::msg::Target>::SharedPtr sub_target_;
+  rclcpp::Subscription<self_driving::msg::Target>::SharedPtr        sub_target_;
   rclcpp::Publisher<robomas_interfaces::msg::RobomasPacket>::SharedPtr pub_cmd_;
-  rclcpp::Publisher<self_driving::msg::TargetStatus>::SharedPtr pub_status_;
+  rclcpp::Publisher<self_driving::msg::TargetStatus>::SharedPtr     pub_status_;
   rclcpp::Subscription<robomas_interfaces::msg::RobomasFrame>::SharedPtr sub_feedback_;
 
-  std::deque<std::array<double, 3>> history_; // 履歴用
-  self_driving::msg::Target latest_target_;   // 最新の目標値
-  robomas_interfaces::msg::RobomasFrame feedback_msg; //フィードバックを持たせる
-  bool has_target_ = false;                   // 目標が来たかどうか
-  int prev_mode = -1;
-  bool mode_init_ = true;
-  angleControl control;
+  std::deque<std::array<double, 3>> history_;
+  self_driving::msg::Target         latest_target_;
+  robomas_interfaces::msg::RobomasFrame feedback_msg;
+  bool   has_target_ = false;
+  int    prev_mode   = -1;
+  bool   mode_init_  = true;
 
+  angleControl shooter_;
+
+  // 把持・昇降用状態
+  double motor5_th_now = 0.0; // 昇降
+  double motor6_th_now = 0.0; // 把持
+
+  bool closed  = true;
+  bool closing = false;
+  bool opened  = false;
+  bool opening = false;
+  double m6_th_tgt = 0.0;
+
+  bool downed  = true;
+  bool downing = false;
+  bool uped    = false;
+  bool uping   = false;
+  double m5_th_tgt = 0.0;
 
   // ==========================
   // ICP callback
   // ==========================
   void pose_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
   {
-    if (latest_target_.mode==1) {shoot(); return;}
-    else if(latest_target_.mode==2) {grip(); return;}
-    if (msg->data.size() < 3) return;
-
-    double x = msg->data[0];
-    double y = msg->data[1];
-    double yaw = msg->data[2];
-
-    // LiDARの位置と向きを考慮してロボットの位置と向きを逆算
-    //self<map> = icp<map> + offset<base_link>
-    double robot_x = x + this->lidar_offset_x * std::cos(yaw) + this->lidar_offset_y * std::sin(yaw);
-    double robot_y = y - this->lidar_offset_x * std::sin(yaw) + this->lidar_offset_y * std::cos(yaw);
-    double robot_yaw = yaw - this->lidar_offset_yaw;
-    printf("robot_body_pose:%lf,%lf,%lf\n",robot_x,robot_y,robot_yaw);
-
-    // まだ一度も目標を受信していない
-    //or 目標に到達してから新しい目標を受信していない場合は何もしない
     if (!has_target_) return;
 
-    double tx = this->latest_target_.x; // 目標値
-    double ty = this->latest_target_.y;
-    double tyaw = this->latest_target_.yaw;
+    // mode による分岐
+    if (latest_target_.mode == 1) {
+      shoot();
+      return;
+    } else if (latest_target_.mode == 2) {
+      grip();
+      return;
+    }
+
+    if (msg->data.size() < 3) return;
+
+    double x   = msg->data[0];
+    double y   = msg->data[1];
+    double yaw = msg->data[2];
+
+    double robot_x   = x + lidar_offset_x * std::cos(yaw) + lidar_offset_y * std::sin(yaw);
+    double robot_y   = y - lidar_offset_x * std::sin(yaw) + lidar_offset_y * std::cos(yaw);
+    double robot_yaw = yaw - lidar_offset_yaw;
+
+    printf("robot_body_pose:%lf,%lf,%lf\n", robot_x, robot_y, robot_yaw);
+
+    double tx   = latest_target_.x;
+    double ty   = latest_target_.y;
+    double tyaw = latest_target_.yaw;
 
     navigate(robot_x, robot_y, robot_yaw, tx, ty, tyaw);
   }
 
   void target_callback(const self_driving::msg::Target::SharedPtr msg)
   {
+    mode_init_ = (prev_mode != msg->mode);
+    prev_mode  = msg->mode;
+
     latest_target_ = *msg;
-    mode_init_ = (prev_mode != msg->mode);  // モード切り替わり検知
-    prev_mode = msg->mode;
-    has_target_ = true;
+    has_target_    = true;
   }
+
   void update_feedback(const robomas_interfaces::msg::RobomasFrame::SharedPtr msg)
   {
     feedback_msg = *msg;
+    // 角度インデックスは環境に合わせて調整
+    // ここでは仮に angle[4] が motor5, angle[5] が motor6 とする
+    if (feedback_msg.angle.size() > 5) {
+      motor5_th_now = feedback_msg.angle[4];
+      motor6_th_now = feedback_msg.angle[5];
+    }
   }
 
   // ==========================
@@ -128,32 +145,30 @@ private:
   void navigate(double robot_x, double robot_y, double robot_yaw,
                 double target_x, double target_y, double target_yaw)
   {
-    // 世界座標での誤差
-    double ex = target_x - robot_x;
-    double ey = target_y - robot_y;
+    double ex    = target_x - robot_x;
+    double ey    = target_y - robot_y;
     double e_yaw = normalize_angle(target_yaw - robot_yaw);
 
-    printf("e: %lf,%lf,%lf\n",ex,ey,e_yaw);
+    printf("e: %lf,%lf,%lf\n", ex, ey, e_yaw);
 
-    // baselink系へ変換
     double ex_b = std::cos(robot_yaw) * ex + std::sin(robot_yaw) * ey;
     double ey_b = -std::sin(robot_yaw) * ex + std::cos(robot_yaw) * ey;
 
-    printf("robot_yaw:%lf\n",robot_yaw);
+    printf("robot_yaw:%lf\n", robot_yaw);
 
-    //eに応じて
-    // 制御入力（P制御）
     double th_margin = 0.2;
-    double er = std::sqrt(ex*ex+ey*ey);
-    double vx = this->pgain_x * ex_b;
-    double vy = this->pgain_y * ey_b;
-    double wz = this->pgain_theta * e_yaw;
+    double er        = std::sqrt(ex * ex + ey * ey);
+    double vx        = pgain_x * ex_b;
+    double vy        = pgain_y * ey_b;
+    double wz        = pgain_theta * e_yaw;
 
     self_driving::msg::TargetStatus status;
     status.index = latest_target_.index;
-    if (std::sqrt(ex*ex+ey*ey)<nav_radius) vx=vy=0;
-    if (std::abs(e_yaw)<=th_margin) wz=0;
-    if ((std::sqrt(ex*ex+ey*ey)<nav_radius)&&(e_yaw<=th_margin)) {
+
+    if (er < nav_radius) vx = vy = 0.0;
+    if (std::abs(e_yaw) <= th_margin) wz = 0.0;
+
+    if (er < nav_radius && std::abs(e_yaw) <= th_margin) {
       status.status = true;
       printf("END\n");
     } else {
@@ -161,60 +176,54 @@ private:
     }
     pub_status_->publish(status);
 
-    printf("vx,vy,wz=%lf,%lf,%lf\n",vx,vy,wz);
-    publish_cmd(vx,vy,wz);
+    printf("vx,vy,wz=%lf,%lf,%lf\n", vx, vy, wz);
+    publish_cmd(vx, vy, wz);
   }
-  
 
   // ==========================
   // 速度 publish
   // ==========================
   void publish_cmd(double vx, double vy, double wz)
   {
-    //robotzahyoukei
-    double vw1 = -(0.866 * vx + 0.5 * vy + this->L * wz);  // 前左（+60°）
-    double vw2 = -(-0.866 * vx + 0.5 * vy + this->L * wz);  // 前右（-60°）
-    double vw3 = -(-1.0 * vy + this->L * wz);                // 後ろ（180°）
-  //1. どれが一番大きいか決める
-  //2. 一番大きいやつとの比を取る
-  //3. 一番大きい値をクランプしたら2の比をかけてvw_iを導く
-    double stuck_v=0;
-    double scale = 1000.0f;
-    std::array<double,3> v{vw1*scale,vw2*scale,vw3*scale};
-    for (int i=0;i<3;i++)
-      if (std::abs(stuck_v) < std::abs(v[i])) stuck_v=v[i];
+    double vw1 = -(0.866 * vx + 0.5 * vy + L * wz);
+    double vw2 = -(-0.866 * vx + 0.5 * vy + L * wz);
+    double vw3 = -(-1.0 * vy + L * wz);
+
+    double stuck_v = 0.0;
+    double scale   = 1000.0;
+    std::array<double, 3> v{vw1 * scale, vw2 * scale, vw3 * scale};
+
+    for (int i = 0; i < 3; i++)
+      if (std::abs(stuck_v) < std::abs(v[i])) stuck_v = v[i];
 
     if (std::abs(stuck_v) < 1e-4) {
-      printf("%lf\n",stuck_v);
-      stuck_v = 0;
+      printf("%lf\n", stuck_v);
+      stuck_v = 0.0;
     } else {
-      for (int i=0;i<3;i++)
-        v[i]/=stuck_v;
+      for (int i = 0; i < 3; i++)
+        v[i] /= stuck_v;
 
-      stuck_v = std::clamp((float)stuck_v,-1000.0f,1000.0f);
+      stuck_v = std::clamp((float)stuck_v, -1000.0f, 1000.0f);
     }
 
     auto msg = robomas_interfaces::msg::RobomasPacket();
 
-    // motor1(足回り)
     robomas_interfaces::msg::MotorCommand cmd1;
     cmd1.motor_id = 1;
-    cmd1.mode = 1;
-    cmd1.target = stuck_v*v[0];
+    cmd1.mode     = 1;
+    cmd1.target   = stuck_v * v[0];
     msg.motors.push_back(cmd1);
 
-    // motor2(足回り)
     robomas_interfaces::msg::MotorCommand cmd2;
     cmd2.motor_id = 2;
-    cmd2.mode = 1;
-    cmd2.target = stuck_v*v[1];
+    cmd2.mode     = 1;
+    cmd2.target   = stuck_v * v[1];
     msg.motors.push_back(cmd2);
 
-    // motor3(足回り)
     robomas_interfaces::msg::MotorCommand cmd3;
     cmd3.motor_id = 3;
-    cmd3.mode = 1;
-    cmd3.target = stuck_v*v[2];
+    cmd3.mode     = 1;
+    cmd3.target   = stuck_v * v[2];
     msg.motors.push_back(cmd3);
 
     pub_cmd_->publish(msg);
@@ -230,60 +239,197 @@ private:
   // ==========================
   double normalize_angle(double a)
   {
-    while (a > M_PI) a -= 2 * M_PI;
+    while (a > M_PI)  a -= 2 * M_PI;
     while (a < -M_PI) a += 2 * M_PI;
     return a;
   }
 
   // ==========================
-  // 平均化（任意）
+  // 射出
   // ==========================
-  void add_history(double x, double y, double yaw)
+  void shoot()
   {
-    history_.push_back({x, y, yaw});
-    if (history_.size() > 10) history_.pop_front();//ここははみだしを消す処理
-  }
-
-  std::array<double, 3> filtered_pose()
-  {
-    double sx = 0, sy = 0, syaw = 0;
-    for (auto &p : history_) {
-      sx += p[0];
-      sy += p[1];
-      syaw += p[2];
-    }
-    size_t n = history_.size();
-    return {sx / n, sy / n, syaw / n};
-  }
-  
-  void shoot() {
     auto msg = robomas_interfaces::msg::RobomasPacket();
     robomas_interfaces::msg::MotorCommand cmd;
     self_driving::msg::TargetStatus status_msg;
-    cmd.motor_id = 4;
+
+    cmd.motor_id   = 4;
     status_msg.index = latest_target_.index;
-    //本来モーターがどれでも使えるようにしようとしてたが射出専用になった
-    status_msg.status = control.motor(
+
+    status_msg.status = shooter_.motor(
       feedback_msg,
       cmd,
-      3500,360*18*9,
-      false,
-      mode_init_
+      3500,          // ta_angle
+      360 * 18 * 9,  // ta_v
+      false,         // negfrag
+      mode_init_     // init
     );
 
-    // init は target_callback でのみ更新する
     mode_init_ = false;
+
     msg.motors.push_back(cmd);
     pub_cmd_->publish(msg);
     pub_status_->publish(status_msg);
   }
 
-  void grip() {
-    printf("把持は一旦スキップ");
-    self_driving::msg::TargetStatus status_msg;
-    status_msg.index = latest_target_.index;
-    status_msg.status = true;
-  };
+  // ==========================
+  // 把持・昇降ユーティリティ
+  // ==========================
+  bool haji_open()
+  {
+    if (closed) {
+      auto msg = robomas_interfaces::msg::RobomasPacket();
+      robomas_interfaces::msg::MotorCommand cmd6;
+      cmd6.motor_id = 6;
+      cmd6.mode     = 2;
+      m6_th_tgt     = motor6_th_now - 50000.0;
+      cmd6.target   = m6_th_tgt;
+      msg.motors.push_back(cmd6);
+      pub_cmd_->publish(msg);
+      opening = true;
+      closed  = false;
+    }
+
+    if (motor6_th_now < m6_th_tgt - 10.0 || motor6_th_now > m6_th_tgt + 10.0) {
+      return false;
+    } else if (opening) {
+      opening = false;
+      opened  = true;
+      return true;
+    } else {
+      return true;
+    }
+  }
+
+  bool haji_close()
+  {
+    if (opened) {
+      auto msg = robomas_interfaces::msg::RobomasPacket();
+      robomas_interfaces::msg::MotorCommand cmd6;
+      cmd6.motor_id = 6;
+      cmd6.mode     = 2;
+      m6_th_tgt     = motor6_th_now + 50000.0;
+      cmd6.target   = m6_th_tgt;
+      msg.motors.push_back(cmd6);
+      pub_cmd_->publish(msg);
+      closing = true;
+      opened  = false;
+    }
+
+    if (motor6_th_now < m6_th_tgt - 10.0 || motor6_th_now > m6_th_tgt + 10.0) {
+      return false;
+    } else if (closing) {
+      closing = false;
+      closed  = true;
+      return true;
+    } else {
+      return true;
+    }
+  }
+
+  bool up()
+  {
+    if (downed) {
+      auto msg = robomas_interfaces::msg::RobomasPacket();
+      robomas_interfaces::msg::MotorCommand cmd5;
+      cmd5.motor_id = 5;
+      cmd5.mode     = 2;
+      m5_th_tgt     = motor5_th_now + 85000.0;
+      cmd5.target   = m5_th_tgt;
+      msg.motors.push_back(cmd5);
+      pub_cmd_->publish(msg);
+      uping  = true;
+      downed = false;
+    }
+
+    if (motor5_th_now < m5_th_tgt - 10.0 || motor5_th_now > m5_th_tgt + 10.0) {
+      return false;
+    } else if (uping) {
+      uping = false;
+      uped  = true;
+      return true;
+    } else {
+      return true;
+    }
+  }
+
+  bool down()
+  {
+    if (uped) {
+      auto msg = robomas_interfaces::msg::RobomasPacket();
+      robomas_interfaces::msg::MotorCommand cmd5;
+      cmd5.motor_id = 5;
+      cmd5.mode     = 2;
+      m5_th_tgt     = motor5_th_now - 85000.0;
+      cmd5.target   = m5_th_tgt;
+      msg.motors.push_back(cmd5);
+      pub_cmd_->publish(msg);
+      downing = true;
+      uped    = false;
+    }
+
+    if (motor5_th_now < m5_th_tgt - 10.0 || motor5_th_now > m5_th_tgt + 10.0) {
+      return false;
+    } else if (downing) {
+      downing = false;
+      downed  = true;
+      return true;
+    } else {
+      return true;
+    }
+  }
+
+  // ==========================
+  // 把持シーケンス
+  // ==========================
+  bool grip()
+  {
+    // ここでは「開く→下げる→閉じる→上げる」など、
+    // 実際のシーケンスに合わせて組む。
+    // 例として「開く→下げる→閉じる→上げる」を書く。
+
+    static int grip_phase = 0;
+
+    bool done_open = false;
+    bool done_down = false;
+    bool done_close = false;
+    bool done_up = false;
+
+    switch (grip_phase) {
+    case 0:
+      done_open = haji_open();
+      if (done_open) grip_phase = 1;
+      break;
+    case 1:
+      done_down = down();
+      if (done_down) grip_phase = 2;
+      break;
+    case 2:
+      done_close = haji_close();
+      if (done_close) grip_phase = 3;
+      break;
+    case 3:
+      if (haji_open()) grip_phase = 4;
+      break;
+    case 4:
+      done_up = up();
+      if (done_up) grip_phase = 5;
+      break;
+    default:
+      break;
+    }
+
+    if (grip_phase == 5) {
+      self_driving::msg::TargetStatus status_msg;
+      status_msg.index  = latest_target_.index;
+      status_msg.status = true;
+      pub_status_->publish(status_msg);
+      grip_phase = 0;
+      return true;
+    }
+
+    return false;
+  }
 };
 
 int main(int argc, char **argv)

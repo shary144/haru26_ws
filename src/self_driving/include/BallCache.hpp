@@ -5,9 +5,9 @@
 namespace ballcache {
 
 struct Ball {
-    int color_id;   // 0,1,2
-    float x;
-    float y;
+    int color_id=0;   // 0,1,2
+    float x=0.0f;
+    float y=0.0f;
     bool onstage = false;
     size_t N = 0;   // 観測回数
 };
