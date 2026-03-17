@@ -93,6 +93,17 @@ private:
                     inner_order = 0;
                 }
             }
+            if (inner_order == 3 && grip()) {
+                color_cache[chosen_ball.color_id]++;
+
+                if (color_cache[chosen_ball.color_id] < 2) {
+                    inner_order = 0;   // 同じ色をもう1つ取りに行く
+                } else {
+                    phase = 2;         // 射出フェーズへ
+                    inner_order = 0;
+                }
+            }
+
             break;
 
         case 2:
