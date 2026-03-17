@@ -5,6 +5,7 @@
 #include "robomas_interfaces/msg/robomas_packet.hpp"
 #include "robomas_interfaces/msg/motor_command.hpp"
 #include "robomas_interfaces/msg/can_frame.hpp"
+#include "robomas_interfaces/msg/robomas_frame.hpp"
 
 using namespace std::chrono_literals;
 
@@ -15,9 +16,19 @@ public:
         sub_joy_   = this->create_subscription<sensor_msgs::msg::Joy>("joy", 10, std::bind(&MyRobotNode::joy_callback, this, std::placeholders::_1));        
         pub_motor_ = this->create_publisher<robomas_interfaces::msg::RobomasPacket>("/robomas/cmd", 10);
         can_pub_   = this->create_publisher<robomas_interfaces::msg::CanFrame>("/robomas/can_tx", 10);
+        sub_motor_  = this->create_subscription<robomas_interfaces::msg::RobomasFrame>("/robomas/feedback", 10, std::bind(&MyRobotNode::motor_callback, this, std::placeholders::_1));
     }
 
 private:
+    int step = 0; 
+
+    float motor6_th_now;
+    float motor5_th_now;
+    void motor_callback(const robomas_interfaces::msg::RobomasFrame::SharedPtr motor_fb){
+        motor6_th_now = motor_fb->angle[5]; // 把持の角度
+        motor5_th_now = motor_fb->angle[4]; // 昇降の角度
+    }
+    
     void jidou() { // 自動モードであることを示す
         auto msg_jidou = robomas_interfaces::msg::CanFrame();
         msg_jidou.id = 0x100;         // 送信したいCAN ID
@@ -54,11 +65,139 @@ private:
         can_pub_->publish(msg_fanfare_no);
     }
 
+    bool syasyutu_flag = false;
+    void syasyutu() { //射出の関数
+        if (!syasyutu_flag) {
+            syasyutu_flag = true; // syasyutu()が実行中であることを示す
+        }
+    }
+    // 把持用（はじめは閉じた状態）
+    bool closed = true;
+    bool closing = false;
+    bool opened = false;
+    bool opening = false;
+    double m6_th_tgt;
+    bool haji_open() {
+        if (closed) {
+            //motor6(把持)
+            auto msg = robomas_interfaces::msg::RobomasPacket();
+            robomas_interfaces::msg::MotorCommand cmd6;
+            cmd6.motor_id = 6;
+            cmd6.mode = 2; // 位置制御
+            m6_th_tgt = motor6_th_now - 50000.0f;
+            cmd6.target = m6_th_tgt; // 50000度回転
+            msg.motors.push_back(cmd6);
+            pub_motor_->publish(msg);   
+            opening = true;
+            closed = false;
+        }
+
+        if (motor6_th_now < m6_th_tgt - 10.0f || motor6_th_now > m6_th_tgt + 10.0f) {
+            return false;
+        }
+        else if (opening){
+            opening = false;
+            opened = true;
+            return true;
+        }
+        else {
+            return true;
+        }
+    }
+    bool haji_close() {
+        if (opened) {
+            //motor6(把持)
+            auto msg = robomas_interfaces::msg::RobomasPacket();
+            robomas_interfaces::msg::MotorCommand cmd6;
+            cmd6.motor_id = 6;
+            cmd6.mode = 2; // 位置制御
+            m6_th_tgt = motor6_th_now + 50000.0f;
+            cmd6.target = m6_th_tgt; // 50,000度回転
+            msg.motors.push_back(cmd6);
+            pub_motor_->publish(msg);   
+            closing = true;
+            opened = false;
+        }
+
+        if (motor6_th_now < m6_th_tgt - 10.0f || motor6_th_now > m6_th_tgt + 10.0f) {
+            return false;
+        }
+        else if (closing){
+            closing = false;
+            closed = true;
+            return true;
+        }
+        else {
+            return true;
+        }
+    }
+
+    // 昇降用
+    bool downed = true;
+    bool downing = false;
+    bool uped = false;
+    bool uping = false;
+    double m5_th_tgt;
+    bool up() {
+        if (downed) {
+            //motor5(昇降)
+            auto msg = robomas_interfaces::msg::RobomasPacket();
+            robomas_interfaces::msg::MotorCommand cmd5;
+            cmd5.motor_id = 5;
+            cmd5.mode = 2; // 位置制御
+            m5_th_tgt = motor5_th_now + 85000.0f;
+            cmd5.target = m5_th_tgt; // 85,000度回転
+            msg.motors.push_back(cmd5);
+            pub_motor_->publish(msg);
+            uping = true;
+            downed = false;
+        }
+
+        if (motor5_th_now < m5_th_tgt - 10.0f || motor5_th_now > m5_th_tgt + 10.0f) {
+            return false;
+        }
+        else if (uping){
+            uping = false;
+            uped = true;
+            return true;
+        }
+        else {
+            return true;
+        }
+    }
+    bool down() {
+        if (uped) {
+            //motor5(昇降)
+            auto msg = robomas_interfaces::msg::RobomasPacket();
+            robomas_interfaces::msg::MotorCommand cmd5;
+            cmd5.motor_id = 5;
+            cmd5.mode = 2; // 位置制御
+            m5_th_tgt = motor5_th_now - 85000.0f;
+            cmd5.target = m5_th_tgt; // 85,000度回転
+            msg.motors.push_back(cmd5);
+            pub_motor_->publish(msg);   
+            downing = true;
+            uped = false;
+        }
+
+        if (motor5_th_now < m5_th_tgt - 10.0f || motor5_th_now > m5_th_tgt + 10.0f) {
+            return false;
+        }
+        else if (downing){
+            downing = false;
+            downed = true;
+            return true;
+        }
+        else {
+            return true;
+        }
+    }
+
     void joy_callback(const sensor_msgs::msg::Joy::SharedPtr joyinfo){
         auto msg = robomas_interfaces::msg::RobomasPacket();
 
-        float cos = joyinfo->axes[0]; //左スティックX
-        float sin = -(joyinfo->axes[1]); //左スティックY
+        float cos = -(joyinfo->axes[0]); //左スティックX
+        float sin = joyinfo->axes[1]; //左スティックY
 
         //とりますべて速度制御(mode = 1)
 
@@ -66,43 +205,49 @@ private:
         robomas_interfaces::msg::MotorCommand cmd1;
         cmd1.motor_id = 1;
         cmd1.mode = 1;
-        cmd1.target = (-0.5f * cos + 0.866f * sin + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
+        cmd1.target = (0.5f * cos - 0.866f * sin + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
         msg.motors.push_back(cmd1);
 
         //motor2(足回り)
         robomas_interfaces::msg::MotorCommand cmd2;
         cmd2.motor_id = 2;
         cmd2.mode = 1;
-        cmd2.target = (-0.5f * cos - 0.866f * sin + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
+        cmd2.target = (0.5f * cos + 0.866f * sin + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
         msg.motors.push_back(cmd2);
 
         //motor3(足回り)
         robomas_interfaces::msg::MotorCommand cmd3;
         cmd3.motor_id = 3;
         cmd3.mode = 1;
-        cmd3.target = (cos + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
+        cmd3.target = (-cos + joyinfo->buttons[4] - joyinfo->buttons[5]) * 1000.0f;
         msg.motors.push_back(cmd3);
 
+/*
         //motor4(射出)
         robomas_interfaces::msg::MotorCommand cmd4;
         cmd4.motor_id = 4;
         cmd4.mode = 1;
         cmd4.target = 1000.0f * joyinfo->buttons[1]; // Aボタンで射出
         msg.motors.push_back(cmd4);
+*/
 
+/*
         //motor5(昇降)
         robomas_interfaces::msg::MotorCommand cmd5;
         cmd5.motor_id = 5;
         cmd5.mode = 1;
         cmd5.target = 3000.0f * joyinfo->axes[3]; // 右スティックで上昇、下降
         msg.motors.push_back(cmd5);
+*/
 
+/*
         //motor6(把持)
         robomas_interfaces::msg::MotorCommand cmd6;
         cmd6.motor_id = 6;
         cmd6.mode = 1;
         cmd6.target = 5000.0f * (joyinfo->buttons[3] - joyinfo->buttons[2]); // Yボタンで、Bボタンで
         msg.motors.push_back(cmd6);
+*/
 
         // Publish!
         pub_motor_->publish(msg);        
@@ -121,11 +266,43 @@ private:
            fanfare_no();
         }
 
+        // if (joyinfo->buttons[3]) { // Yボタンが押されたら
+        //     haji_open();
+        // }
+
+        // if (joyinfo->buttons[2]) { // Bボタンが押されたら
+        //     haji_close();
+        // }
+
+        // if (joyinfo->buttons[10]) { // 左スティックが押されたら
+        //     up();
+        // }
+
+        // if (joyinfo->buttons[11]) { // 右スティックが押されたら
+        //     down();
+        // }
+
+        if (step == ) {
+            haji_open();
+        }
+
+        if (step == ) {
+            haji_close();
+        }
+
+        if (step == ) {
+            up();
+        }
+
+        if (step == ) {
+            down();
+        }
     }
 
     rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr sub_joy_;
     rclcpp::Publisher<robomas_interfaces::msg::RobomasPacket>::SharedPtr pub_motor_;
-    rclcpp::Publisher<robomas_interfaces::msg::CanFrame>::SharedPtr can_pub_;    
+    rclcpp::Publisher<robomas_interfaces::msg::CanFrame>::SharedPtr can_pub_;
+    rclcpp::Subscription<robomas_interfaces::msg::RobomasFrame>::SharedPtr  sub_motor_;  
 };
 
 int main(int argc, char **argv) {
