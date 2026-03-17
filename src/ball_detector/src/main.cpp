@@ -295,9 +295,9 @@ int main(int argc, char** argv) {
                 double theta_x = 30.0 * M_PI / 180.0; // 下向き30度
                 double theta_y = 0.0;
                 double theta_z = 0.0;
-                double x_0 = 0; //横オフセット[m]
+                double x_0 = 0.20; //横オフセット[m]
                 double y_0 = 0.48; //上下オフセット[m]
-                double z_0 = 0.0; //前後オフセット[m]
+                double z_0 = 0.28; //前後オフセット[m]
 
 
                 double X_robot_ = X_cam + x_0;
@@ -350,6 +350,7 @@ int main(int argc, char** argv) {
 
         ball_array.header.stamp = node->now();
         ball_array.header.frame_id = "map";
+        std::cout << "detected" << std::endl;
 
         pub_ball_array->publish(ball_array);
 

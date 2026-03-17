@@ -47,7 +47,7 @@ private:
 
     self_driving::msg::TargetStatus status_msg_;
     int inner_order = 0;
-    int phase = 0;
+    int phase = -1;
 
     std::array<int,3> color_cache; // 色ごとの取得数
     ballcache::BallCache ball_cache_;
@@ -84,32 +84,38 @@ private:
         printf("phase:%d, inner_order:%d\n", phase, inner_order);
 
         switch (phase) {
+        case -1:
+            printf("grip_setup\n");
+            if(grip_setup()) {
+                phase = 0;
+            }
+            break;
 
         case 0:
             printf("start\n");
             if (pursuit({0.35, 5.888, M_PI/2})) {
                 phase = 1;
-                inner_order = 0;
+                inner_order = 3;
             }
             break;
 
         case 1:
             printf("catch_ball\n");
 
-            if (inner_order == 0) {
-                choose_ball();
-                inner_order = 1;
-            }
+            // if (inner_order == 0) {
+            //     choose_ball();
+            //     inner_order = 1;
+            // }
 
-            if (inner_order == 1 &&
-                pursuit({chosen_ball.x, 5.888, M_PI/2})) {
-                inner_order = 2;
-            }
+            // if (inner_order == 1 &&
+            //     pursuit({chosen_ball.x, 5.888, M_PI/2})) {
+            //     inner_order = 2;
+            // }
 
-            if (inner_order == 2 &&
-                pursuit({chosen_ball.x, chosen_ball.y - 0.33, M_PI/2})) {
-                inner_order = 3;
-            }
+            // if (inner_order == 2 &&
+            //     pursuit({chosen_ball.x, chosen_ball.y - 0.33, M_PI/2})) {
+            //     inner_order = 3;
+            // }
 
             if (inner_order == 3 && grip()) {
                 color_cache[chosen_ball.color_id]++;
@@ -205,6 +211,22 @@ private:
         pub_pose_->publish(msg);
 
         if (status_msg_.status) {
+            std::cout << "grip end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+            status_msg_.status = false;
+            return true;
+        }
+        return false;
+    }
+
+    bool grip_setup()
+    {
+        self_driving::msg::Target msg;
+        msg.index = 0;
+        msg.mode  = 3;
+        pub_pose_->publish(msg);
+
+        if (status_msg_.status) {
+            std::cout << "setup end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
             status_msg_.status = false;
             return true;
         }
@@ -266,6 +288,7 @@ private:
 
     void update_status(const self_driving::msg::TargetStatus::SharedPtr msg)
     {
+        std::cout << "UPDATE_STATUS REACH!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
         status_msg_ = *msg;
     }
 

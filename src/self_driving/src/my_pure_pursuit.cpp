@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 
@@ -82,7 +83,7 @@ private:
   bool downing = false;
   bool uped    = false;
   bool uping   = false;
-  double m5_th_tgt = 0.0;
+  double m5_th_tgt = 199.0;
 
   // ==========================
   // ICP callback
@@ -99,6 +100,10 @@ private:
       grip();
       return;
     }
+    else {
+      grip_setup();
+      return;
+    }
 
     if (msg->data.size() < 3) return;
 
@@ -106,11 +111,12 @@ private:
     double y   = msg->data[1];
     double yaw = msg->data[2];
 
-    double robot_x   = x + lidar_offset_x * std::cos(yaw) + lidar_offset_y * std::sin(yaw);
-    double robot_y   = y - lidar_offset_x * std::sin(yaw) + lidar_offset_y * std::cos(yaw);
-    double robot_yaw = yaw - lidar_offset_yaw;
+    double robot_x   = x - 0.3;
+    double robot_y   = y ;
+    double robot_yaw = yaw + 2.0/3.0 * M_PI;
 
     printf("robot_body_pose:%lf,%lf,%lf\n", robot_x, robot_y, robot_yaw);
+    printf("lidar_pose:%lf,%lf,%lf\n", x, y, yaw);
 
     double tx   = latest_target_.x;
     double ty   = latest_target_.y;
@@ -171,13 +177,18 @@ private:
     if (er < nav_radius && std::abs(e_yaw) <= th_margin) {
       status.status = true;
       printf("END\n");
+      // 田巻
+      publish_cmd(0., 0., 0.);
+      has_target_ = false;
+      // 田巻
+      pub_status_->publish(status);
+      printf("vx,vy,wz=%lf,%lf,%lf\n", vx, vy, wz);
     } else {
-      status.status = false;
+      printf("vx,vy,wz=%lf,%lf,%lf\n", vx, vy, wz);
+      publish_cmd(vx, vy, wz);  // status.status = false;
     }
-    pub_status_->publish(status);
-
-    printf("vx,vy,wz=%lf,%lf,%lf\n", vx, vy, wz);
-    publish_cmd(vx, vy, wz);
+    // 田巻
+    // pub_status_->publish(status);
   }
 
   // ==========================
@@ -269,7 +280,11 @@ private:
 
     msg.motors.push_back(cmd);
     pub_cmd_->publish(msg);
+    std::cout << "SHOOT END!!!!!!!!!!!!!!!!" << std::endl;
     pub_status_->publish(status_msg);
+    // まずそう
+    // 田巻
+    has_target_ = false;
   }
 
   // ==========================
@@ -295,8 +310,11 @@ private:
     } else if (opening) {
       opening = false;
       opened  = true;
+      std::cout << "Hazi Opening end!!!!!!!!!!!!!!!!!!" << std::endl;
       return true;
     } else {
+      std::cout << "Unreachable!!!!!!!!!!!!!!!!!!" << std::endl;
+      throw 0;
       return true;
     }
   }
@@ -355,6 +373,7 @@ private:
 
   bool down()
   {
+    std::cout << "in down()" << std::endl;
     if (uped) {
       auto msg = robomas_interfaces::msg::RobomasPacket();
       robomas_interfaces::msg::MotorCommand cmd5;
@@ -367,8 +386,8 @@ private:
       downing = true;
       uped    = false;
     }
-
-    if (motor5_th_now < m5_th_tgt - 10.0 || motor5_th_now > m5_th_tgt + 10.0) {
+    std::cout << "down: motor5_th_now: " << motor5_th_now << std::endl;
+    if (motor5_th_now < m5_th_tgt - 200.0 || motor5_th_now > m5_th_tgt + 10.0) {
       return false;
     } else if (downing) {
       downing = false;
@@ -423,12 +442,39 @@ private:
       self_driving::msg::TargetStatus status_msg;
       status_msg.index  = latest_target_.index;
       status_msg.status = true;
+      std::cout << "Grip END!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
       pub_status_->publish(status_msg);
       grip_phase = 0;
+      // 田巻
+      has_target_ = false;
       return true;
     }
 
     return false;
+  }
+
+  // 田巻
+  void grip_setup() {
+    static int setup_step = 0;
+
+    switch(setup_step) {
+      case 0:
+      if(haji_open()) setup_step = 1;
+      break;
+
+      case 1:
+      if(up()) setup_step = 2;
+      break;
+    }
+
+    if(setup_step == 2) {
+      self_driving::msg::TargetStatus status_msg;
+      status_msg.status = true;
+      std::cout << "setup END!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+      pub_status_->publish(status_msg);
+      setup_step = 0;
+      has_target_ = false;
+    }
   }
 };
 
