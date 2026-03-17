@@ -5,6 +5,7 @@
 #include "robomas_interfaces/msg/robomas_frame.hpp"
 #include "self_driving/msg/target_status.hpp"
 #include "self_driving/msg/target.hpp"
+#include "Shoot.hpp"
 
 #include <vector>
 #include <array>
@@ -73,6 +74,9 @@ private:
   self_driving::msg::Target latest_target_;   // 最新の目標値
   robomas_interfaces::msg::RobomasFrame feedback_msg; //フィードバックを持たせる
   bool has_target_ = false;                   // 目標が来たかどうか
+  int prev_mode = -1;
+  bool mode_init_ = true;
+  angleControl control;
 
 
   // ==========================
@@ -80,6 +84,8 @@ private:
   // ==========================
   void pose_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
   {
+    if (latest_target_.mode==1) {shoot(); return;}
+    else if(latest_target_.mode==2) {grip(); return;}
     if (msg->data.size() < 3) return;
 
     double x = msg->data[0];
@@ -107,6 +113,8 @@ private:
   void target_callback(const self_driving::msg::Target::SharedPtr msg)
   {
     latest_target_ = *msg;
+    mode_init_ = (prev_mode != msg->mode);  // モード切り替わり検知
+    prev_mode = msg->mode;
     has_target_ = true;
   }
   void update_feedback(const robomas_interfaces::msg::RobomasFrame::SharedPtr msg)
@@ -140,30 +148,7 @@ private:
     double vx = this->pgain_x * ex_b;
     double vy = this->pgain_y * ey_b;
     double wz = this->pgain_theta * e_yaw;
-    /*
-    // 安定化のための制限
-    vx = std::clamp(vx, -0.3, 0.3);
-    vy = std::clamp(vy, -0.3, 0.3);
-    wz = std::clamp(wz, -1.5, 1.5);
-    */
 
-    // 到達判定
-    /*
-    double dist = std::sqrt(ex * ex + ey * ey);
-    self_driving::msg::TargetStatus status;
-    if (dist < nav_radius) {
-      publish_stop();
-
-      // ここで TargetStatus を publish してもいい
-      status.status= 1; // 到達
-      has_target_ = false; // 新しい目標が来るまで動かないようにする
-    } else {
-      status.status= 0; // 未到達
-      publish_cmd(vx, vy, wz);
-    }
-    pub_status_->publish(status);
-  }*/
-  //  teishijoukennwohazusu
     self_driving::msg::TargetStatus status;
     status.index = latest_target_.index;
     if (std::sqrt(ex*ex+ey*ey)<nav_radius) vx=vy=0;
@@ -270,16 +255,35 @@ private:
     size_t n = history_.size();
     return {sx / n, sy / n, syaw / n};
   }
-  /*
+  
   void shoot() {
-    angleControl control();
     auto msg = robomas_interfaces::msg::RobomasPacket();
     robomas_interfaces::msg::MotorCommand cmd;
-    cmd.id = 4;
-    control.motor(feedback_msg,cmd,3500,360*18*9);
+    self_driving::msg::TargetStatus status_msg;
+    cmd.motor_id = 4;
+    status_msg.index = latest_target_.index;
+    //本来モーターがどれでも使えるようにしようとしてたが射出専用になった
+    status_msg.status = control.motor(
+      feedback_msg,
+      cmd,
+      3500,360*18*9,
+      false,
+      mode_init_
+    );
+
+    // init は target_callback でのみ更新する
+    mode_init_ = false;
     msg.motors.push_back(cmd);
     pub_cmd_->publish(msg);
-  }*/
+    pub_status_->publish(status_msg);
+  }
+
+  void grip() {
+    printf("把持は一旦スキップ");
+    self_driving::msg::TargetStatus status_msg;
+    status_msg.index = latest_target_.index;
+    status_msg.status = true;
+  };
 };
 
 int main(int argc, char **argv)
