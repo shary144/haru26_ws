@@ -48,6 +48,7 @@ private:
     self_driving::msg::TargetStatus status_msg_;
     int inner_order = 0;
     int phase = -1;
+    int msg_index_=0;
 
     std::array<int,3> color_cache; // 色ごとの取得数
     ballcache::BallCache ball_cache_;
@@ -66,9 +67,9 @@ private:
     // fallback 用の仮のデフォルト位置（適当に置いてるので要調整）
     double default_pos[3][2] =
     {
-        {0.35, 5.5},  // blue
-        {0.60, 5.5},  // yellow
-        {0.85, 5.5}   // red
+        {0.5,0.8},  // blue.x
+        {1.1,1.4},  // yellow.x
+        {1.7,2.0}   // red.x
     };
 
     // ==========================
@@ -81,7 +82,7 @@ private:
             last_robot_y_ = msg->data[1];
         }
 
-        printf("phase:%d, inner_order:%d\n", phase, inner_order);
+        printf("phase:%d, inner_order:%d\n, msg_index_: %d", phase, inner_order, msg_index_);
 
         switch (phase) {
         case -1:
@@ -95,11 +96,30 @@ private:
             printf("start\n");
             if (pursuit({0.35, 5.888, M_PI/2})) {
                 phase = 1;
-                inner_order = 3;
+                inner_order = 0;
             }
             break;
 
         case 1:
+            printf("sweep");
+            if (inner_order == 0 && grip_to_sweep()){
+                inner_order = 1;
+            }
+            if (inner_order == 1 && pursuit({0.35, 5.888, M_PI*2/3})){
+                inner_order = 2;
+            }
+            if (inner_order == 2 && pursuit({3.15, 5.888, M_PI*2/3})){
+                inner_order = 3;
+            }
+            if (inner_order == 3 && pursuit({3.15, 5.888, M_PI*1/3})){
+                inner_order = 4;
+            }
+            if (inner_order == 4 && pursuit({0.35, 3.5, 0})){
+                inner_order = 5;
+            }
+            break;
+/*
+        case 2:
             printf("catch_ball\n");
 
             // if (inner_order == 0) {
@@ -156,8 +176,9 @@ private:
                     phase = 0;
                 }
             }
-            break;
+            break;*/
         }
+
     }
 
     // ==========================
@@ -167,8 +188,9 @@ private:
     {
         publish_target(wp[0], wp[1], wp[2]);
 
-        if (status_msg_.status) {
+        if (status_msg_.status && (status_msg_.index == msg_index_)) {
             status_msg_.status = false;
+            msg_index_++;
             return true;
         }
         return false;
@@ -177,7 +199,7 @@ private:
     void publish_target(double x, double y, double yaw)
     {
         self_driving::msg::Target msg;
-        msg.index = 0;
+        msg.index = msg_index_;
         msg.mode  = 0;
         msg.x = x;
         msg.y = y;
@@ -191,12 +213,13 @@ private:
     bool shoot()
     {
         self_driving::msg::Target msg;
-        msg.index = 0;
+        msg.index = msg_index_;
         msg.mode  = 1;
         pub_pose_->publish(msg);
 
-        if (status_msg_.status) {
+        if (status_msg_.status && (status_msg_.index == msg_index_)) {
             status_msg_.status = false;
+            msg_index_++;
             return true;
         }
         return false;
@@ -206,13 +229,14 @@ private:
     bool grip()
     {
         self_driving::msg::Target msg;
-        msg.index = 0;
+        msg.index = ++ msg_index_;
         msg.mode  = 2;
         pub_pose_->publish(msg);
 
-        if (status_msg_.status) {
+        if (status_msg_.status && (status_msg_.index==msg_index_)) {
             std::cout << "grip end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
             status_msg_.status = false;
+            msg_index_++;
             return true;
         }
         return false;
@@ -221,13 +245,45 @@ private:
     bool grip_setup()
     {
         self_driving::msg::Target msg;
-        msg.index = 0;
+        msg.index = msg_index_;
         msg.mode  = 3;
         pub_pose_->publish(msg);
 
-        if (status_msg_.status) {
+        if (status_msg_.status && (status_msg_.index==msg_index_)) {
             std::cout << "setup end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
             status_msg_.status = false;
+            msg_index_++;
+            return true;
+        }
+        return false;
+    }
+
+    bool grip2() 
+    {
+        self_driving::msg::Target msg;
+        msg.index = msg_index_;
+        msg.mode  = 4;
+        pub_pose_->publish(msg);
+
+        if (status_msg_.status) {
+            std::cout << "grip2 end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+            status_msg_.status = false;
+            msg_index_++;
+            return true;
+        }
+        return false;
+    }
+    bool grip_to_sweep()
+    {
+        self_driving::msg::Target msg;
+        msg.index = msg_index_;
+        msg.mode  = 5;
+        pub_pose_->publish(msg);
+
+        if (status_msg_.status) {
+            std::cout << "grip_to_sweep end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+            status_msg_.status = false;
+            msg_index_++;
             return true;
         }
         return false;

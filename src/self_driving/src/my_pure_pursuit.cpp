@@ -79,6 +79,9 @@ private:
   bool opening = false;
   double m6_th_tgt = 0.0;
 
+  bool closed2 = true;
+  bool closed3 = true;
+
   bool downed  = true;
   bool downing = false;
   bool uped    = false;
@@ -99,9 +102,14 @@ private:
     } else if (latest_target_.mode == 2) {
       grip();
       return;
-    }
-    else {
+    } else if (latest_target_.mode == 3) {
       grip_setup();
+      return;
+    } else if (latest_target_.mode == 4) {
+      grip2();
+      return;
+    } else if (latest_target_.mode == 5) {
+      haji_open_to_sweep();
       return;
     }
 
@@ -188,7 +196,7 @@ private:
       publish_cmd(vx, vy, wz);  // status.status = false;
     }
     // 田巻
-    // pub_status_->publish(status);
+    pub_status_->publish(status);
   }
 
   // ==========================
@@ -270,8 +278,8 @@ private:
     status_msg.status = shooter_.motor(
       feedback_msg,
       cmd,
-      3500,          // ta_angle
-      360 * 18 * 9,  // ta_v
+      7548,          // ta_angle
+      3500,  // ta_v
       false,         // negfrag
       mode_init_     // init
     );
@@ -319,6 +327,27 @@ private:
     }
   }
 
+  //ボールをなぎ倒してリバースゾーンに入れるよう
+  void haji_open_to_sweep()
+  {
+    if (closed3) {
+      auto msg = robomas_interfaces::msg::RobomasPacket();
+      robomas_interfaces::msg::MotorCommand cmd6;
+      cmd6.motor_id = 6;
+      cmd6.mode     = 2;
+      m6_th_tgt     = motor6_th_now - 25000.0;
+      cmd6.target   = m6_th_tgt;
+      msg.motors.push_back(cmd6);
+      pub_cmd_->publish(msg);
+      closed3  = false;
+    }
+
+    self_driving::msg::TargetStatus status_msg;
+    status_msg.index=latest_target_.index;
+    status_msg.status=((motor6_th_now < m6_th_tgt - 10.0) && (motor6_th_now < m6_th_tgt + 10.0));
+    pub_status_->publish(status_msg);
+  }
+
   bool haji_close()
   {
     if (opened) {
@@ -344,6 +373,7 @@ private:
       return true;
     }
   }
+
 
   bool up()
   {
@@ -445,6 +475,52 @@ private:
       std::cout << "Grip END!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
       pub_status_->publish(status_msg);
       grip_phase = 0;
+      // 田巻
+      has_target_ = false;
+      return true;
+    }
+
+    return false;
+  }
+
+    // ==========================
+  bool grip2()
+  {
+    // ここでは「開く→下げる→閉じる→上げる」など、
+    // 実際のシーケンスに合わせて組む。
+    // 例として「開く→下げる→閉じる→上げる」を書く。
+
+    static int grip_phase2 = 0;
+
+    bool done_open2 = false;
+    bool done_down2 = false;
+    bool done_close2 = false;
+    bool done_up2 = false;
+
+    switch (grip_phase2) {
+    case 0:
+      done_open2 = haji_open();
+      if (done_open2) grip_phase2 = 1;
+      break;
+    case 1:
+      done_down2 = down();
+      if (done_down2) grip_phase2 = 2;
+      break;
+    case 2:
+      done_close2 = haji_close();
+      if (done_close2) grip_phase2 = 3;
+      break;      
+    default:
+      break;
+    }
+
+    if (grip_phase2 == 3) {
+      self_driving::msg::TargetStatus status_msg;
+      status_msg.index  = latest_target_.index;
+      status_msg.status = true;
+      std::cout << "Grip2 END!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+      pub_status_->publish(status_msg);
+      grip_phase2 = 0;
       // 田巻
       has_target_ = false;
       return true;
