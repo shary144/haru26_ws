@@ -67,8 +67,8 @@ private:
     // fallback 用の仮のデフォルト位置（適当に置いてるので要調整）
     double default_pos[3][2] =
     {
-        {0.5,0.8},  // blue.x
-        {1.1,1.4},  // yellow.x
+        {0.5,0.8},  // yellow.x
+        {1.1,1.4},  // blue.x
         {1.7,2.0}   // red.x
     };
 
