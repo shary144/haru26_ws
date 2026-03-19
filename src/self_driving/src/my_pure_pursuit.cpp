@@ -107,7 +107,7 @@ private:
     } else if (latest_target_.mode == 6) {
       onlyup();
     }
-    else {
+    else if(latest_target_.mode == 3) {
       grip_setup();
       return;
     }
