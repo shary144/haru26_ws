@@ -99,6 +99,13 @@ private:
     } else if (latest_target_.mode == 2) {
       grip();
       return;
+    } else if (latest_target_.mode == 4) {
+      grip_down_to_sweep();
+      return;
+    } else if (latest_target_.mode == 5) {
+      grip2();
+    } else if (latest_target_.mode == 6) {
+      onlyup();
     }
     else {
       grip_setup();
@@ -452,6 +459,72 @@ private:
 
     return false;
   }
+  bool onlyup() {
+    static int onlyup_phase = 0;
+
+
+    bool done_open = false;
+    bool done_down = false;
+    bool done_close = false;
+    bool done_up = false;
+
+    
+    switch (onlyup_phase) {
+    case 0:
+      if (up()) onlyup_phase = 1;
+      break;
+    default:
+      break;
+    }
+    
+    if (onlyup_phase == 1) {
+      self_driving::msg::TargetStatus status_msg;
+      status_msg.index  = latest_target_.index;
+      status_msg.status = true;
+      std::cout << "Onlyup END!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+      pub_status_->publish(status_msg);
+      onlyup_phase = 0;
+      // 田巻
+      has_target_ = false;
+      return true;
+    }
+    
+  }
+  bool grip2() {
+    // ここでは「開く→下げる→閉じる→上げる」など、
+    // 実際のシーケンスに合わせて組む。
+    // 例として「開く→下げる→閉じる→上げる」を書く。
+
+    static int grip2_phase = 0;
+
+    switch (grip2_phase) {
+    case 0:
+      if (haji_open()) grip2_phase = 1;
+      break;
+    case 1:
+      if (down()) grip2_phase = 2;
+      break;
+    case 2:
+      if (haji_close()) grip2_phase = 3;
+      break;
+    default:
+      break;
+    }
+
+    if (grip2_phase == 3) {
+      self_driving::msg::TargetStatus status_msg;
+      status_msg.index  = latest_target_.index;
+      status_msg.status = true;
+      std::cout << "Grip2 END!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+      pub_status_->publish(status_msg);
+      grip2_phase = 0;
+      // 田巻
+      has_target_ = false;
+      return true;
+    }
+
+    return false;
+  }
 
   // 田巻
   void grip_setup() {
@@ -475,6 +548,24 @@ private:
       setup_step = 0;
       has_target_ = false;
     }
+  }
+
+  void grip_down_to_sweep() {
+    static int down_phase = 0;
+    self_driving::msg::TargetStatus status_msg;
+    if ((down_phase == 0) && haji_open()){
+      status_msg.status = true;
+      //ここに状態変数
+      closed  = true;
+      closing = false;
+      opened  = false;
+      opening = false;
+      std::cout << "grip_down_to_sweep END!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    }
+    status_msg.status = false;
+    pub_status_->publish(status_msg);
+    down_phase = 0;
+    has_target_ = false;
   }
 };
 

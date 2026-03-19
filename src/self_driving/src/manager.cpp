@@ -9,6 +9,7 @@
 #include <vector>
 #include <array>
 #include <cmath>
+#include "robomas_interfaces/msg/robomas_frame.hpp"
 
 class ManagerNode : public rclcpp::Node
 {
@@ -34,6 +35,7 @@ public:
             "ball_array", 10,
             std::bind(&ManagerNode::update_ball, this, std::placeholders::_1)
         );
+        can_pub_ = this->create_publisher<robomas_interfaces::msg::CanFrame>("/robomas/can_tx", 10);
 
         color_cache = {0,0,0};
     }
@@ -44,10 +46,10 @@ private:
     rclcpp::Publisher<self_driving::msg::Target>::SharedPtr          pub_pose_;
     rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_icp_;
     rclcpp::Subscription<self_driving::msg::BallArray>::SharedPtr    sub_ball_;
+    rclcpp::Publisher<robomas_interfaces::msg::CanFrame>SharedPtr     can_pub_;
 
     self_driving::msg::TargetStatus status_msg_;
-    int inner_order = 0;
-    int phase = -1;
+    int phase = 0;
 
     std::array<int,3> color_cache; // 色ごとの取得数
     ballcache::BallCache ball_cache_;
@@ -58,103 +60,170 @@ private:
 
     double note_front_zone[3][2] =
     {
-        {1.362, 3.5},   // blue
-        {1.8,   1.85},  // yellow
-        {0.924, 5.112}  // red
+        {2.9, 1.5+0.35},   // yellow
+        {2.46, 3.5},  // blue
+        {2.024, 7-(1.5+0.35)}  // red
     };
 
     // fallback 用の仮のデフォルト位置（適当に置いてるので要調整）
     double default_pos[3][2] =
     {
-        {0.35, 5.5},  // blue
-        {0.60, 5.5},  // yellow
-        {0.85, 5.5}   // red
+        {0.5, 0.8},  // yellow.x
+        {1.1, 1.4},  // blue.x;
+        {1.7, 1.8}   // red.x
     };
+
+    int color_id = 0;
 
     // ==========================
     // オートマトン
     // ==========================
     void automaton(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
     {
+        auto msg_can = robomas_interfaces::msg::CanFrame();
+        msg_can.id = 0x100;
+        msg_can.dlc = 8;
+        msg_can.data = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+
+        can_pub_->publish(msg_can);
         if (msg->data.size() >= 2) {
             last_robot_x_ = msg->data[0];
             last_robot_y_ = msg->data[1];
         }
 
-        printf("phase:%d, inner_order:%d\n", phase, inner_order);
+        printf("phase:%d", phase);
 
         switch (phase) {
         case -1:
-            printf("grip_setup\n");
+            printf("grip_setup\n");//把持を開いた状態で.
             if(grip_setup()) {
                 phase = 0;
             }
             break;
-
         case 0:
-            printf("start\n");
-            if (pursuit({0.35, 5.888, M_PI/2})) {
+            printf("start(120度でnotezone入る).\n");
+            if (pursuit({0.35, 6.2, M_PI/2})) {
                 phase = 1;
-                inner_order = 3;
             }
             break;
 
         case 1:
-            printf("catch_ball\n");
-
-            // if (inner_order == 0) {
-            //     choose_ball();
-            //     inner_order = 1;
-            // }
-
-            // if (inner_order == 1 &&
-            //     pursuit({chosen_ball.x, 5.888, M_PI/2})) {
-            //     inner_order = 2;
-            // }
-
-            // if (inner_order == 2 &&
-            //     pursuit({chosen_ball.x, chosen_ball.y - 0.33, M_PI/2})) {
-            //     inner_order = 3;
-            // }
-
-            if (inner_order == 3 && grip()) {
-                color_cache[chosen_ball.color_id]++;
-
-                if (color_cache[chosen_ball.color_id] < 2) {
-                    inner_order = 0;
-                } else {
-                    phase = 2;
-                    inner_order = 0;
-                }
+            printf("なぎ倒すために把持を開く.\n");
+            if (grip_down_tosweep()) {
+                phase = 2;
             }
             break;
 
         case 2:
-            printf("return_and_shoot\n");
-
-            if (inner_order == 0 &&
-                pursuit({0.35, note_front_zone[chosen_ball.color_id][1], M_PI})) {
-                inner_order = 1;
+            printf("なぎ倒すように. \n");
+            if (pursuit({3.15, 6.2, M_PI/2})) {
+                phase = 3;
             }
-
-            if (inner_order == 1 &&
-                pursuit({note_front_zone[chosen_ball.color_id][0],
-                         note_front_zone[chosen_ball.color_id][1], M_PI})) {
-                inner_order = 2;
+            break;
+        case 3:
+            printf("ちょっと回転. \n");
+            if(pursuit({3.15 ,6.2, M_PI/3})) {
+                phase = 4;
             }
-
-            if (inner_order == 2 && shoot()) {
-                inner_order = 3;
+            break;
+        case 4:
+            printf("スタートに戻ったらここは完了。\n");
+            if (pursuit({0.35, 3.5, 0})) {
+                phase = 5;
             }
-
-            if (inner_order == 3) {
-                int total = color_cache[0] + color_cache[1] + color_cache[2];
-                if (total >= 3) {
-                    puts("fanfare");
-                } else {
-                    inner_order = 0;
-                    phase = 0;
-                }
+            break;
+        case 5:
+            printf("箱の間を通る:1.\n");
+            if (pursuit({0.35, 3.5-0.912, 0})) {
+                phase = 6;
+            }
+            break;
+        case 6:
+            printf("箱の間を通る:2\n");
+            if (pursuit({3.5-0.35, 3.5-0.912,0})) {
+                phase = 7;
+            }
+            break;
+        case 7:
+            printf("リバース定位置へ行く");
+            if (pursuit({3.5-0.35, 0.262+0.038+0.4, -M_PI/2})) {
+                phase = 8;
+            }
+            break;
+        case 8:
+            printf("[%d]色のボール一つ目の前に行く\n",color_id);
+            if (pursuit({3.5-default_pos[color_id][0],0.262+0.038+0.4,-M_PI/2})) {
+                phase = 9;
+            }
+            break;
+        case 9:
+            printf("一個目を取る\n",color_id);
+            if (grip()) {
+                phase = 10;
+            }
+            break;
+        case 10:
+            printf("[%d]色のボール二つ目の前に行く\n",color_id);
+            if (pursuit({3.5-default_pos[color_id][1],0.262+0.038+0.4,-M_PI/2})) {
+                phase = 11;
+            }
+            break;
+        case 11:
+            printf("二個目を取る\n",color_id);
+            if (grip2()) {
+                phase = 12;
+            }
+            break;
+        case 12:
+            printf("リバース定位置へ行く\n");
+            if (pursuit({3.5-0.35, 0.262+0.038+0.4, -M_PI/2})) {
+                phase = 13;
+            }
+            break;
+        case 13:
+            printf("(壁際,ノーツy)に行く\n");
+            if (pursuit({3.5-0.35, note_front_zone[color_id][1], 0})) {
+                phase = 14;
+            }
+            break;
+        case 14:
+            printf("(ノード手前x,ノードy)に行く\n");
+            if (pursuit({note_front_zone[color_id][0],note_front_zone[color_id][1],0})) {
+                phase = 15;
+            }
+            break;
+        case 15:
+            printf("一個目を射出\n");
+            if (shoot()) {
+                phase = 16;
+            }
+            break;
+        case 16:
+            printf("昇降を上げる\n");
+            if (onlyup()) {
+                phase = 17;
+            }
+            break;
+        case 17:
+            printf("一個目を射出\n");
+            if (shoot()) {
+                phase = 18;
+            }
+            break;
+        case 18:
+            printf("(壁際、ノーツy)に戻る\n");
+            if (pursuit({3.5-0.35,note_front_zone[color_id][1],0})) {
+                phase = 19;
+            }
+            break;
+        case 19:
+            printf("色によって変わるが\n");
+            if (color_id>=3) {
+                printf("fanfare!");
+            } else {
+                printf("phase 7へ戻る");
+                color_id++;
+                phase = 7;
             }
             break;
         }
@@ -227,6 +296,47 @@ private:
 
         if (status_msg_.status) {
             std::cout << "setup end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+            status_msg_.status = false;
+            return true;
+        }
+        return false;
+    }
+    bool grip_down_tosweep()
+    {
+        self_driving::msg::Target msg;
+        msg.index = 0;
+        msg.mode  = 4;
+        pub_pose_->publish(msg);
+
+        if (status_msg_.status) {
+            std::cout << "grip_down_tosweep end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+            status_msg_.status = false;
+            return true;
+        }
+        return false;
+    }
+    bool grip2()
+    {
+        self_driving::msg::Target msg;
+        msg.index = 0;
+        msg.mode = 5;
+
+        if (status_msg_.status) {
+            std::cout << "grip2 end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+            status_msg_.status = false;
+            return true;
+        }
+        return false;
+    }
+
+    bool onlyup()
+    {
+        self_driving::msg::Target msg;
+        msg.index = 0;
+        msg.mode = 6;
+
+        if (status_msg_.status) {
+            std::cout << "onlyup end!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
             status_msg_.status = false;
             return true;
         }
