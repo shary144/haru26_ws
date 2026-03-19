@@ -9,7 +9,7 @@
 #include <vector>
 #include <array>
 #include <cmath>
-#include "robomas_interfaces/msg/robomas_frame.hpp"
+#include "robomas_interfaces/msg/can_frame.hpp"
 
 class ManagerNode : public rclcpp::Node
 {
@@ -35,6 +35,7 @@ public:
             "ball_array", 10,
             std::bind(&ManagerNode::update_ball, this, std::placeholders::_1)
         );
+
         can_pub_ = this->create_publisher<robomas_interfaces::msg::CanFrame>("/robomas/can_tx", 10);
 
         color_cache = {0,0,0};
@@ -46,7 +47,7 @@ private:
     rclcpp::Publisher<self_driving::msg::Target>::SharedPtr          pub_pose_;
     rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_pose_icp_;
     rclcpp::Subscription<self_driving::msg::BallArray>::SharedPtr    sub_ball_;
-    rclcpp::Publisher<robomas_interfaces::msg::CanFrame>SharedPtr     can_pub_;
+    rclcpp::Publisher<robomas_interfaces::msg::CanFrame>::SharedPtr  can_pub_;
 
     self_driving::msg::TargetStatus status_msg_;
     int phase = 0;
@@ -86,6 +87,7 @@ private:
         msg_can.data = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
 
         can_pub_->publish(msg_can);
+
         if (msg->data.size() >= 2) {
             last_robot_x_ = msg->data[0];
             last_robot_y_ = msg->data[1];

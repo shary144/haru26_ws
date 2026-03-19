@@ -20,7 +20,17 @@ add_executable(my_robot_node
   src/asimawari.cpp
 )
 
+add_executable(my_point10_node
+  src/point10.cpp
+)
+
 ament_target_dependencies(my_robot_node
+  rclcpp
+  sensor_msgs
+  robomas_interfaces
+)
+
+ament_target_dependencies(my_point10_node
   rclcpp
   sensor_msgs
   robomas_interfaces
@@ -28,6 +38,7 @@ ament_target_dependencies(my_robot_node
 
 install(TARGETS
   my_robot_node
+  my_point10_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
